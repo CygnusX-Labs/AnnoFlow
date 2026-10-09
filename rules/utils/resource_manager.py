@@ -1,67 +1,58 @@
 #!/usr/bin/env python3
 # *---utf-8---*
 """
-Resource Management Utilities
-==============================
-Helper functions for managing computational resources in different execution environments.
+AnnoFlow Resource Manager
+==========================
+HPC 资源 profile 解析（Flow framework §9.1）：
+从 cluster_config.yaml 的 resource_profiles 取命名 profile；
+local 模式只移除队列类键、必须保留 threads；
+cluster 模式 queue_type 经 clusters 映射，缺失即 fail-fast（§3.4）。
 """
 
-import os
+from utils.exceptions import ConfigError
 
 
-def rule_resource(config, resource_type='default', skip_queue_on_local=False, logger=None):
+def rule_resource(config, profile_name="default", skip_queue_on_local=True, logger=None):
     """
-    根据运行环境返回资源配置
-    
-    从 conf/resource.yaml 读取 resource_presets 配置，如果没有则使用默认值
-    
+    从 cluster_config.yaml 的 resource_profiles 中获取命名 profile。
+
     Args:
-        config: Snakemake配置字典
-        resource_type: 资源类型 (default, high_resource, low_resource)
-        skip_queue_on_local: 本地运行时是否跳过队列
-        logger: 日志记录器
-    
+        config: Snakemake config
+        profile_name: "low_resource" | "default" | "high_resource" | "very_high_resource"
+        skip_queue_on_local: local 模式下移除 queue_type（threads 必须保留）
+        logger: 可选日志记录器
+
     Returns:
-        dict: 资源配置字典
+        dict: {"threads": N, "mem_mb": N, "runtime": N, ("queue": name)}
+
+    Raises:
+        ConfigError: profile 未定义 / cluster 模式 clusters 映射缺失
     """
-    # 默认资源配置
-    default_presets = {
-        'default': {
-            'mem_gb': 8,
-            'runtime': 60,
-        },
-        'high_resource': {
-            'mem_gb': 32,
-            'runtime': 240,
-        },
-        'low_resource': {
-            'mem_gb': 4,
-            'runtime': 30,
-        }
-    }
-    
-    # 从配置中读取 resource_presets
-    resource_presets = config.get('resource_presets', default_presets)
-    
-    # 获取指定类型的资源
-    resource = resource_presets.get(
-        resource_type, 
-        resource_presets.get('default', default_presets['default'])
-    ).copy()
-    
-    # 检查是否在集群环境运行
-    execution_config = config.get('execution', {})
-    is_cluster = execution_config.get('environment', 'local') == 'cluster'
-    
-    if is_cluster:
-        resource['queue'] = execution_config.get('queue', 'normal')
+    profiles = config.get("resource_profiles", {})
+
+    if profile_name not in profiles:
+        raise ConfigError(
+            f"未知资源 profile '{profile_name}'，cluster_config.yaml 中可用: {sorted(profiles)}"
+        )
+
+    resource = dict(profiles[profile_name])
+
+    if config.get("execution_mode", "local") == "cluster":
+        queue_type = resource.get("queue_type")
+        clusters = config.get("clusters", {})
+        if queue_type not in clusters:
+            raise ConfigError(
+                f"cluster 模式下 queue_type '{queue_type}' 在 cluster_config.yaml 的 "
+                f"clusters 映射中不存在（可用: {sorted(clusters)}），禁止静默降级（§3.4）。"
+            )
+        resource["queue"] = config.get("queue_id") or clusters[queue_type]
     elif skip_queue_on_local:
-        pass
-    
+        resource.pop("queue_type", None)
+
     if logger:
-        logger.debug(f"Resource allocation: {resource_type} -> {resource}")
-    
+        logger.debug(f"Resource allocation: {profile_name} -> {resource}")
+
     return resource
 
 
-__all__ = ['rule_resource']
+__all__ = ["rule_resource"]

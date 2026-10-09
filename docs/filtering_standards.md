@@ -1,6 +1,17 @@
 # EggNOG & KofamScan Processor 过滤与可信度评估标准
 
-本文档汇总了 `eggnog_processor.py` 和 `KofamScan_processor.py` 两个脚本的质量过滤逻辑与可信度（Confidence）评分体系。
+本文档汇总了 `eggnog_processor.py` 和 `kofamscan_processor.py` 两个脚本的质量过滤逻辑与可信度（Confidence）评分体系。
+
+## Snakemake 输出与下游使用
+
+- `03.merge/SUMMARY_REPORT.txt` 自动记录实际配置的筛选阈值、注释计数和两个软件的 KO 一致性，不需要手动修改每次运行的报告。
+- `Total` 按每个样本处理后表中的唯一 `query` 计数，不是输入 FASTA 的总蛋白数。KEGG 和 GO 可以属于同一个蛋白，不能相加作为 Total；`Both + KEGG only + GO only + Neither = Total`。多样本 TOTAL 是各样本计数之和。
+- `03.merge/kegg_consistency.tsv` 按 `(sample, query)` 对齐两个软件，去掉 `ko:` 前缀后比较 KO 集合。有交集记为 `一致`，均有 KO 但无交集记为 `冲突`；一致表示支持至少一个相同 KO，不代表全部 KO 集合完全相等。
+- `03.merge/kegg_consistency_stats.txt` 统计双方共同有 KO 的蛋白数、一致数、冲突数、一致率，以及双方高置信且 KO 一致的蛋白数。一致率分母是双方共同有 KO 的蛋白数。
+- 下游默认使用各软件的 `_highconf.tsv`。双工具支持的严格集合需同时满足 `status=一致`、`eggnog_high_conf=True`、`kofamscan_high_conf=True`，仅取 `shared_ko` 作为双方支持的 KO；冲突记录保留供人工复核，不自动当作一致注释。
+- eggNOG 的主表已经执行硬阈值过滤，KofamScan 主表保留最佳命中（包含非高置信记录），两者 Total 不能直接作为注释质量对比。当前 `require_kegg: true` 会排除仅有 GO 的蛋白；用于完整 GO 注释时，应设为 `false` 并重新运行 eggNOG 处理步骤。
+- 高置信评级是本流程的筛选规则，不是经过校准的正确率概率。富集检验背景应来自实际被检测/检验且 ID 一致的基因集合，而非直接使用两个工具命中数的和。
+- 无高置信记录时仍生成带列头的 eggNOG `_highconf.tsv`，避免 Snakemake 因缺少声明的输出而失败。
 
 ---
 
@@ -70,7 +81,7 @@
 
 ---
 
-## 2. KofamScan_processor（KofamScan 结果处理）
+## 2. kofamscan_processor（KofamScan 结果处理）
 
 ### 2.1 输入解析与预过滤
 
@@ -79,7 +90,7 @@
 - **星号标记（`*`）** = `is_significant=True`，表示该 hit 通过了 KofamScan 的内置阈值
 - 解析字段：`gene_name`、`KO`、`threshold`、`score`、`E-value`、`definition`
 
-> 注意：KofamScan_processor **不会**在解析阶段丢弃未带星号的 hit，所有 hit 都会进入后续分析；最终过滤由 `--min-confidence` 控制。
+> 注意：kofamscan_processor **不会**在解析阶段丢弃未带星号的 hit，所有 hit 都会进入后续分析；最终过滤由 `--min-confidence` 控制。
 
 ### 2.2 最佳 KO 选择策略
 
@@ -128,7 +139,7 @@
 
 ## 3. 两Processor对比速查
 
-| 维度 | eggnog_processor | KofamScan_processor |
+| 维度 | eggnog_processor | kofamscan_processor |
 |------|------------------|---------------------|
 | **输入** | `*.emapper.annotations` | KofamScan `detail` 输出 |
 | **核心过滤** | E-value、Bit-score、可选 KEGG/GO 强制 | KofamScan 内置阈值（星号）+ score 评估 |

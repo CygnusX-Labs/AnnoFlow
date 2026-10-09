@@ -1,0 +1,48 @@
+# =============================================================================
+# AnnoFlow 项目级配置示例（analysisyaml，§3.2）
+# =============================================================================
+# 使用方式：
+#   snakemake -s /path/to/AnnoFlow/snakefile --cores 8 --use-conda \
+#     --logger rich-loguru \
+#     --config analysisyaml=/path/to/this/file.yaml
+#
+# ⚠️ 路径键（sample_csv / workflow / data_deliver / input_dir / reference_path）
+#    必须为绝对路径：样本表解析发生在 workdir 重定向前（§3.2 已验证的坑）。
+
+# ─── 项目元数据 ───
+project_name: my_annotation_project
+species: Dioscorea_alata
+client: demo
+
+# ─── 路径（必须绝对路径）───
+sample_csv: /data/project/01.workflow/samples.csv
+workflow: /data/project/01.workflow
+data_deliver: /data/project/02.data_deliver
+input_dir: /data/project/00.protein
+reference_path: /data/reference/AnnoFlow
+
+# ─── 执行模式 ───
+execution_mode: local
+queue_id: ""
+
+# ─── 模块开关（不写则用仓库默认值；逐个设 false 可从 DAG 摘除对应目标）───
+eggnog: true
+kofamscan: true
+integrate: true
+merge: true
+ai: false
+deliver: true
+report: true
+
+# ─── 按需覆盖运行参数 ───
+# eggnog_cpu: 16
+# evalue_threshold: 1.0e-10
+# min_confidence: High
+
+# ─── 启用 AI 时配置（ai: true）───
+# ai_config:
+#   provider: openai
+#   model: glm-4.7
+#   api_key: ARK_API_KEY        # 环境变量名占位，真实 key 经 export 注入
+#   api_base: "https://ark.cn-beijing.volces.com/api/coding/v3"
+#   taxonomy: "Viridiplantae;Streptophyta;Embryophyta"

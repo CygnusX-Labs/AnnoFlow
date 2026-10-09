@@ -783,27 +783,24 @@ def main():
     console.print(f"[blue]📄 详细报告:[/blue] {report_file}")
     
     # 生成高质量子集
-    if stats['high_confidence'] > 0:
-        high_conf_file = f"{args.output}_highconf.tsv"
-        high_conf_records = [r for r in records if r.confidence_level == "High"]
-        
-        with open(high_conf_file, 'w') as f:
-            # 列头
-            base_headers = [
-                'query', 'seed_ortholog', 'evalue', 'score', 'eggnog_ogs',
-                'max_annot_lvl', 'cog_category', 'description', 'preferred_name',
-                'gos', 'ec', 'kegg_ko', 'kegg_pathway', 'kegg_module',
-                'kegg_reaction', 'kegg_rclass', 'brite', 'kegg_tc', 'cazy',
-                'bigg_reaction', 'pfams', 'confidence_level', 'confidence_score', 
-                'confidence_reason'
-            ]
-            f.write('\t'.join(base_headers) + '\n')
-            
-            for record in high_conf_records:
-                f.write(record.to_line(include_confidence=True) + '\n')
-        
-        console.print(f"[green]⭐ 高置信度子集:[/green] {high_conf_file} ({len(high_conf_records)} 条)")
-        logger.info(f"高置信度子集已生成: {high_conf_file}")
+    high_conf_file = f"{args.output}_highconf.tsv"
+    high_conf_records = [record for record in records if record.confidence_level == "High"]
+
+    with open(high_conf_file, 'w') as handle:
+        base_headers = [
+            'query', 'seed_ortholog', 'evalue', 'score', 'eggnog_ogs',
+            'max_annot_lvl', 'cog_category', 'description', 'preferred_name',
+            'gos', 'ec', 'kegg_ko', 'kegg_pathway', 'kegg_module',
+            'kegg_reaction', 'kegg_rclass', 'brite', 'kegg_tc', 'cazy',
+            'bigg_reaction', 'pfams', 'confidence_level', 'confidence_score',
+            'confidence_reason'
+        ]
+        handle.write('\t'.join(base_headers) + '\n')
+        for record in high_conf_records:
+            handle.write(record.to_line(include_confidence=True) + '\n')
+
+    console.print(f"[green]⭐ 高置信度子集:[/green] {high_conf_file} ({len(high_conf_records)} 条)")
+    logger.info(f"高置信度子集已生成: {high_conf_file}")
 
 
 if __name__ == '__main__':

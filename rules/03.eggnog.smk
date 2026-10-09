@@ -1,5 +1,5 @@
 # =============================================================================
-# EggNOG-Mapper Rules
+# AnnoFlow - 03. eggnog-mapper 功能注释规则
 # =============================================================================
 
 rule eggnog_mapper:
@@ -7,7 +7,8 @@ rule eggnog_mapper:
     Run eggnog-mapper for functional annotation.
     """
     input:
-        get_input_file
+        gate="01.qc/md5_check.tsv",
+        seqs=get_input_file,
     output:
         formatted = "01.eggnog/{sample}.eggnog_temp.fa",
         annotations = "01.eggnog/{sample}.emapper.annotations",
@@ -23,17 +24,17 @@ rule eggnog_mapper:
     resources:
         **rule_resource(config, 'high_resource', skip_queue_on_local=True, logger=logger)
     log:
-        "logs/01.eggnog/{sample}_eggnog_mapper.log"
+        "logs/03.eggnog/{sample}_eggnog_mapper.log"
     benchmark:
-        "benchmarks/01.eggnog/{sample}_eggnog_mapper.txt"
+        "benchmarks/03.eggnog/{sample}_eggnog_mapper.txt"
     message:
         "🧬 Running eggnog-mapper on {wildcards.sample}"
     shell:
         """
         mkdir -p {params.temp_dir}
 
-        awk '/^>/{{print; next}} {{gsub(/[*]/,""); gsub(/[.]/,""); print}}' {input} > {output.formatted}
-        
+        awk '/^>/{{print; next}} {{gsub(/[*]/,""); gsub(/[.]/,""); print}}' {input.seqs} > {output.formatted}
+
         mkdir -p 01.eggnog && \
         emapper.py \
             -i {output.formatted} \
@@ -44,7 +45,7 @@ rule eggnog_mapper:
             --temp_dir {params.temp_dir} \
             --override \
             > {log} 2>&1
-        
+
         rm -rf {params.temp_dir}
         """
 
@@ -59,7 +60,7 @@ rule eggnog_processor:
         high_conf = "01.eggnog/{sample}_eggnog_highconf.tsv",
         report = "01.eggnog/{sample}_eggnog_report.txt"
     conda:
-        workflow.source_path("../env/python3.yaml")
+        workflow.source_path("../env/py3.12.yaml")
     params:
         output_prefix = "01.eggnog/{sample}_eggnog",
         evalue = EVALUE_THRESHOLD,
@@ -70,9 +71,9 @@ rule eggnog_processor:
     resources:
         **rule_resource(config, 'default', skip_queue_on_local=True, logger=logger)
     log:
-        "logs/01.eggnog/{sample}_eggnog_processor.log"
+        "logs/03.eggnog/{sample}_eggnog_processor.log"
     benchmark:
-        "benchmarks/01.eggnog/{sample}_eggnog_processor.txt"
+        "benchmarks/03.eggnog/{sample}_eggnog_processor.txt"
     message:
         "🔬 Processing eggnog for {wildcards.sample}"
     shell:

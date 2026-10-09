@@ -1,17 +1,22 @@
-# KEGG Annotation Pipeline
+# AnnoFlow
 
-基于 eggnog-mapper 和 KofamScan 的基因功能注释流程，提供质量过滤、可信度评估、结果整合和 AI 驱动的逐蛋白可靠性分析。
+基因功能注释流程（Flow 家族成员）：eggnog-mapper 提供 KEGG/GO/COG/EC/Pfam/CAZy 全功能注释，KofamScan 提供 KO 交叉验证，整合层做双工具冲突裁决，可选 AI 驱动的逐蛋白可靠性审核。基于 Snakemake + Conda，模块化设计、质量过滤、可信度评估、交付与报告一体化。
+
+版本：`AnnoFlow v1.0.0`（唯一版本来源为 `config/config.yaml` 的 `pipeline_version`）。
 
 ## 项目特点
 
-- ✅ **模块化设计**: 使用 Snakemake 管理分析流程，规则按步骤编号（01-08），结构清晰
+- ✅ **模块化设计**: 规则按步骤编号（01-09），每个模块可独立开关，关闭后目标自动从 DAG 消失
+- ✅ **输入 MD5 硬性门控**: 所有样本输入校验通过才进入注释，防止用错/损坏的数据跑完整流程
 - ✅ **质量过滤**: 基于 E-value、Bit-score 等多维度过滤
-- ✅ **可信度评估**: 三级可信度分级 (High/Medium/Low)，0-100分评分体系
-- ✅ **结果整合**: 对 eggnog 和 KofamScan 结果进行横向整合与冲突裁决
-- ✅ **多样本合并**: 支持多样本结果合并，便于下游分析
-- ✅ **Conda 环境**: 自动管理依赖环境，保证可重复性
-- ✅ **AI 驱动分析**: 支持逐蛋白可靠性评估（Ollama/OpenAI/Claude），含分层筛选与 Token 消耗追踪
+- ✅ **可信度评估**: 三级可信度分级 (High/Medium/Low)，0-100 分评分体系
+- ✅ **结果整合**: 对 eggnog 和 KofamScan 结果进行横向整合与 KO 冲突裁决
+- ✅ **多样本合并**: 支持多样本结果合并与 KEGG 一致性比对，便于下游分析
+- ✅ **Conda 环境**: 自动管理依赖环境（mamba 加速），保证可重复性
+- ✅ **AI 驱动分析**（可选）: 逐蛋白可靠性评估（Ollama/OpenAI/Claude），含分层筛选与 Token 消耗追踪
+- ✅ **交付与报告**: 自动生成交付清单（manifest + MD5）与 `project_summary.json`
 - ✅ **灵活输入**: 支持 `.pep`、`.fa`、`.fasta`、`.faa`、`.protein` 及复合扩展名（如 `.fa.TD2.1k.pep`）
+- ✅ **Schema 强制验证**: 启动即校验项目配置，路径错误 fail-fast，不浪费集群资源
 
 ---
 
@@ -19,41 +24,97 @@
 
 ```
 .
-├── snakefile                 # 主工作流文件
-├── config.yaml              # 示例配置文件
-├── conf/
-│   ├── config.yaml          # 生产配置
-│   ├── resource.yaml        # 资源配置
-│   ├── parameter.yaml       # 参数配置
-│   └── ai.yaml              # AI 配置
-├── rules/                   # Snakemake 规则目录（按步骤编号）
-│   ├── 01.common.smk       # 通用规则与辅助函数
-│   ├── 02.config.smk       # 全局配置变量
-│   ├── 03.eggnog.smk       # eggnog-mapper 分析规则
-│   ├── 04.kofamscan.smk    # KofamScan 分析规则
-│   ├── 05.integrate.smk    # eggnog + KofamScan 整合评分
-│   ├── 06.merge.smk        # 多样本结果合并
-│   ├── 07.ai_curator.smk   # AI 逐蛋白评估
-│   └── 08.report.smk       # 报告生成规则
-├── env/                     # Conda 环境配置
-│   ├── eggnog-mapper.yaml
-│   ├── kofamscan.yaml
-│   ├── python3.yaml
-│   └── openai.yaml
-├── scripts/                 # Python 处理脚本
+├── snakefile                      # 主工作流：配置加载、schema 验证、目标生成
+├── monitor_config.yaml            # OmicHub 监控推送配置模板（可选）
+├── config/                        # 默认配置四件套 + 样本表模板
+│   ├── config.yaml                # 流程控制：版本、模块开关、ai_config、脚本路径表
+│   ├── reference.yaml             # 数据库参考路径（相对 reference_path 解析）
+│   ├── run_parameter.yaml         # 线程数与过滤阈值
+│   ├── cluster_config.yaml        # HPC 资源 profile 与队列映射
+│   └── samples.csv                # 样本表模板（sample,sample_name）
+├── schema/
+│   └── config.schema.yaml         # 启动时强制验证的配置 schema
+├── examples/
+│   └── analysisyaml.example.yaml  # 项目级配置示例（复制修改后使用）
+├── rules/                         # Snakemake 规则（按步骤编号 01-09）
+│   ├── 01.common.smk              # 通用辅助函数（输入文件解析；无业务 rule）
+│   ├── 02.input_md5.smk           # 输入 MD5 校验门控
+│   ├── 03.eggnog.smk              # eggnog-mapper 注释与结果处理
+│   ├── 04.kofamscan.smk           # KofamScan 注释与结果处理
+│   ├── 05.integrate.smk           # eggnog + KofamScan 整合评分
+│   ├── 06.merge.smk               # 多样本合并 / KO 一致性比对 / 汇总
+│   ├── 07.ai_curator.smk          # AI 逐蛋白可靠性评估（可选）
+│   ├── 08.deliver.smk             # 交付清单（delivery manifest）
+│   ├── 09.Report.smk              # project_summary.json
+│   └── utils/                     # 框架工具（目标生成、配置校验、资源、日志等 8 个模块）
+├── scripts/                       # Python 处理脚本
 │   ├── eggnog_processor.py
-│   ├── KofamScan_processor.py
+│   ├── kofamscan_processor.py
 │   ├── integrate_annotations.py
 │   ├── merge_results.py
-│   └── ai_curator.py
-├── docs/                    # 文档
-│   └── filtering_standards.md   # 过滤与可信度评估标准详解
-├── dataset/                 # 数据库目录
-│   ├── eggnog-mapper/
-│   └── kegg_*_ko_dataset/
-└── test/                    # 测试数据
-    └── test_sample_100.pep
+│   ├── compare_kegg_annotations.py
+│   ├── ai_curator.py
+│   ├── check_input_md5.py
+│   └── deliver.py
+├── env/                           # Conda 环境配置
+│   ├── eggnog-mapper.yaml
+│   ├── kofamscan.yaml
+│   ├── openai.yaml
+│   └── py3.12.yaml
+├── docs/
+│   └── filtering_standards.md     # 过滤与可信度评估标准详解
+└── test/
+    └── TD2.1k.pep                 # 测试数据（1000 条蛋白序列）
 ```
+
+---
+
+## Flow 家族架构
+
+AnnoFlow 对齐 Flow 框架规范，与家族内其他流程共享同一套运行约定。
+
+### 模块开关与依赖自动启用
+
+`config/config.yaml` 中每个模块都有显式布尔开关（默认值必须显式写出）：
+
+| 模块 | 默认 | 说明 |
+|------|------|------|
+| eggnog | true | eggnog-mapper 功能注释（KEGG/GO/COG/EC/Pfam/CAZy） |
+| kofamscan | true | KofamScan KO 注释 |
+| integrate | true | 双工具整合评分与冲突裁决 |
+| merge | true | 多样本合并、KO 一致性比对与汇总 |
+| ai | false | AI 逐蛋白可靠性评估（需配置 `ai_config`） |
+| deliver | true | 交付 delivery_manifest（copy 模式） |
+| report | true | `project_summary.json` 最小报告 |
+
+依赖自动启用：integrate 依赖 eggnog + kofamscan，merge 依赖 integrate，ai 依赖 integrate——开启下游模块时缺失的上游会被自动打开并记录警告日志。任一开关设为 `false`，其产物目标即从 DAG 中消失。
+
+### 输入 MD5 硬性门控（rules/02.input_md5.smk）
+
+所有样本输入文件必须完成 MD5 校验才生成 `01.qc/md5_check.tsv`；下游 `eggnog_mapper` / `kofamscan` 显式依赖该门控文件，校验不过根本不会启动比对。行为规则：
+
+- `input_dir` 下存在 `md5.txt`（格式：`<md5><空格><文件名>`）→ 逐文件比对
+- 无 `md5.txt` → 计算并记录基线，标记 PASS（SRA 兼容原则）
+- 任一 FAIL 或输入文件缺失 → 立即非零退出，流程中止
+
+### 配置四件套 + schema 验证
+
+启动时的配置优先级链：
+
+```
+config 四件套（仓库默认值） < analysisyaml（项目级） < --config key=value（命令行）
+```
+
+四件套：`config/config.yaml`（流程控制）、`config/reference.yaml`（数据库路径）、`config/run_parameter.yaml`（线程与阈值）、`config/cluster_config.yaml`（资源 profile）。合并后经 `schema/config.schema.yaml` **强制验证**：必填 `project_name`、`species`、`sample_csv`、`workflow`、`data_deliver`、`input_dir`、`reference_path`，其中后五个路径键**必须绝对路径**（样本表解析发生在 workdir 重定向前）。参考数据库路径同时做 fail-fast 检查，dry-run 即可暴露路径错误。
+
+### 交付与报告
+
+- **deliver**（默认开）：产物 copy 到 `data_deliver`，生成 `delivery_manifest.json`（来源、大小、MD5、动作）、`delivery_manifest.md5`、`delivery_details.log`
+- **report**（默认开）：生成 `project_summary.json`（项目元数据、样本列表、模块启用状态、关键产物清单）
+
+### 监控推送（可选）
+
+`monitor_config.yaml` 为 OmicHub 工作流监控推送配置模板，与 `--logger rich-loguru` 配套使用；token 等敏感值一律用 `${ENV_VAR}` 引用环境变量，禁止写真实值。
 
 ---
 
@@ -61,107 +122,127 @@
 
 ### 1. 环境准备
 
-确保已安装 [Snakemake](https://snakemake.readthedocs.io/) 和 [Conda](https://docs.conda.io/) (推荐 Miniconda):
+确保已安装 [Snakemake](https://snakemake.readthedocs.io/)（9.9.0+）和 [Conda](https://docs.conda.io/)（推荐 Miniconda + mamba）：
 
 ```bash
-# 安装 Snakemake (需 9.9.0+)
 conda install -n base -c conda-forge -c bioconda snakemake
 ```
 
-### 2. 配置文件设置
+### 2. 准备数据库目录
 
-```bash
-# 复制示例配置文件到生产配置
-cp config.yaml conf/config.yaml
+按参考目录约定部署数据库（本站实例：`/data/jzhang/reference/AnnoFlow`）：
 
-# 编辑生产配置
-vim conf/config.yaml
-vim conf/ai.yaml  # 如需启用 AI 分析
+```
+<reference_path>/
+├── dataset/eggnog-mapper/                  # eggnog-mapper 数据库（eggnog.db 等）
+└── dataset/kegg_<date>_ko_dataset/
+    ├── ko_list                             # KofamScan KO 阈值列表
+    └── profiles/                           # KofamScan HMM profiles
 ```
 
-### 3. 运行分析
+### 3. 编写项目级配置（analysisyaml）
 
 ```bash
-# 运行完整流程（会自动创建 conda 环境）
-snakemake --use-conda --cores 8
-
-# 查看执行计划（不实际运行）
-snakemake --use-conda --cores 8 -n
+cp examples/analysisyaml.example.yaml /path/to/project.yaml
+vim /path/to/project.yaml
 ```
+
+填写 schema 必填的七项（五个路径键必须绝对路径）：
+
+```yaml
+project_name: my_annotation_project
+species: Dioscorea_alata
+sample_csv: /data/project/01.workflow/samples.csv   # 参照 config/samples.csv 模板
+workflow: /data/project/01.workflow                 # 工作目录（Snakemake workdir）
+data_deliver: /data/project/02.data_deliver
+input_dir: /data/project/00.protein                 # 输入蛋白序列目录
+reference_path: /data/jzhang/reference/AnnoFlow
+```
+
+样本表（`sample` 匹配 `input_dir` 下 `<sample>.pep/.fa/.fasta/.faa/.protein`，支持复合扩展名如 `.fa.TD2.1k.pep`）：
+
+```csv
+sample,sample_name
+TD2.1k,TD2.1k
+```
+
+### 4. 运行
+
+Flow 框架标准运行方式：
+
+```bash
+snakemake -s /path/to/AnnoFlow/snakefile --cores 8 --use-conda --conda-frontend mamba \
+  --rerun-triggers mtime --logger rich-loguru \
+  --config analysisyaml=/path/to/project.yaml
+```
+
+### 常用命令
+
+```bash
+# 1. dry-run：查看执行计划（不实际运行），同时暴露配置/路径错误
+snakemake -s /path/to/AnnoFlow/snakefile -n --config analysisyaml=/path/to/project.yaml
+
+# 2. 仅运行注释（eggnog + KofamScan 处理结果）
+snakemake -s /path/to/AnnoFlow/snakefile --cores 8 --use-conda --conda-frontend mamba \
+  --config analysisyaml=/path/to/project.yaml annotate
+
+# 3. 仅运行 AI 分析（需 analysisyaml 中 ai: true，且已有注释结果）
+snakemake -s /path/to/AnnoFlow/snakefile --cores 8 --use-conda --conda-frontend mamba \
+  --config analysisyaml=/path/to/project.yaml ai_analysis
+
+# 4. 仅合并多样本结果
+snakemake -s /path/to/AnnoFlow/snakefile --cores 4 --use-conda --conda-frontend mamba \
+  --config analysisyaml=/path/to/project.yaml merge
+
+# 5. 仅生成分析摘要（单样本 summary + SUMMARY_REPORT.txt，不含 project_summary.json）
+snakemake -s /path/to/AnnoFlow/snakefile --cores 4 --use-conda --conda-frontend mamba \
+  --config analysisyaml=/path/to/project.yaml reports
+
+# 6. 生成 DAG 图
+snakemake -s /path/to/AnnoFlow/snakefile --config analysisyaml=/path/to/project.yaml \
+  --dag | dot -Tpng > dag.png
+```
+
+**关闭模块请写进 analysisyaml，不要用 `--config` 传布尔值**——`--config merge=false` 中的 `false` 会被解析为字符串，非空字符串恒为真，模块关不掉（本流程以 `config.get(k) is not False` 判定开关）：
+
+```yaml
+# project.yaml 中关闭 merge（eggnog/kofamscan/integrate/ai/deliver/report 同理）：
+merge: false
+```
+
+标量参数（如 `evalue_threshold`）仍可用 `--config key=value` 临时覆盖，分析级设置建议一律写 analysisyaml。
 
 ---
 
-## 详细使用方法
+## 配置说明
 
-### 配置文件说明
+### config/config.yaml
 
-配置文件 `conf/config.yaml` 包含以下主要参数：
+仓库级默认配置：流程控制（`pipeline_version`、`log_level`、`execution_mode`）、输入门控（`raw_data.md5`，期望的校验文件名，默认 `md5.txt`）、**模块开关**（见上表）、`ai_config` 段、`scripts` 脚本路径表。
+
+### config/reference.yaml
+
+数据库参考路径集中管理。`reference_path` 入库默认为空（占位），站点真实路径经 analysisyaml 覆盖；`eggnog_data_dir` / `kofam_ko_list` / `kofam_profiles` 相对 `reference_path` 解析（写成绝对路径则直接使用）。
+
+### config/run_parameter.yaml
 
 ```yaml
-# 样本配置（支持复合扩展名，如 rnabloom_transcript_LongOrfs.fa.TD2.1k.pep）
-samples:
-  - test_sample_100
-  - rnabloom_transcript_LongOrfs
-
-input_dir: "./test"        # 输入序列目录
-output_dir: "./results"    # 输出结果目录（当前版本主要作为配置保留，实际输出按步骤目录存放）
-
-# eggnog-mapper 配置
-eggnog_data_dir: "./dataset/eggnog-mapper"
-eggnog_cpu: 8
-
-# KofamScan 配置  
-kofam_ko_list: "./dataset/kegg_2026-02-01_ko_dataset/ko_list"
-kofam_profiles: "./dataset/kegg_2026-02-01_ko_dataset/profiles"
-kofam_cpu: 8
-
-# 过滤阈值
-evalue_threshold: 1.0e-5      # E-value 阈值
-bitscore_threshold: 60         # Bit-score 阈值
-min_confidence: "High"         # 最低可信度
-require_kegg: true             # 要求有 KEGG 注释
-require_go: false              # 要求有 GO 注释
+eggnog_cpu: 8                # eggnog-mapper 线程数
+kofam_cpu: 8                 # KofamScan 线程数
+evalue_threshold: 1.0e-5     # E-value 阈值（越小越严格）
+bitscore_threshold: 60       # Bit-score 阈值（越大越严格）
+min_confidence: "High"       # 最低可信度: High | Medium | Low
+require_kegg: true           # 是否要求必须有 KEGG 注释
+require_go: false            # 是否要求必须有 GO 注释
 ```
 
-### Snakemake 常用命令
+### config/cluster_config.yaml
 
-```bash
-# 1. 运行完整流程
-snakemake --use-conda --cores 8
+`resource_profiles` 定义 low_resource / default / high_resource / very_high_resource 四档（各含 threads / mem_mb / runtime / queue_type），`clusters` 段将 queue_type 映射为实际队列名。`execution_mode: cluster` 时经 `--profile`/调度插件消费；local 模式下资源 profile 仅作参考。
 
-# 2. 仅运行注释步骤（跳过合并和 AI）
-snakemake --use-conda --cores 8 annotate
+### 样本表 samples.csv
 
-# 3. 仅运行 AI 分析（已有注释结果时）
-snakemake --use-conda --cores 8 ai_analysis
-
-# 4. 仅合并多样本结果
-snakemake --use-conda --cores 4 merge
-
-# 5. 只保留高可信度 + KEGG 注释的结果
-snakemake --use-conda --cores 4 \
-    --config min_confidence=High require_kegg=true
-
-# 6. 强制重新运行（删除旧结果后重跑）
-snakemake --use-conda --cores 8 --forceall
-
-# 7. 试运行（不实际执行，查看执行计划）
-snakemake --use-conda --cores 8 -n
-
-# 8. 生成有向无环图（DAG）
-snakemake --dag | dot -Tpng > dag.png
-```
-
-### 命令行参数覆盖
-
-可以在命令行使用 `--config` 参数临时覆盖配置文件：
-
-```bash
-snakemake --use-conda --cores 8 \
-    --config samples=["sample1","sample2"] \
-             evalue_threshold=1e-10 \
-             min_confidence=High
-```
+模板见 `config/samples.csv`。`sample` 为唯一标识（用于文件命名，不得重复、不得含空格），`sample_name` 为显示名称（可选，用于报告）。支持复合扩展名匹配：样本写 `TD2.1k`，实际文件可为 `TD2.1k.pep`、`TD2.1k.fa` 或 `TD2.1k.fa.TD2.1k.pep`。
 
 ---
 
@@ -170,71 +251,56 @@ snakemake --use-conda --cores 8 \
 ### 流程图
 
 ```
-输入序列 (.pep/.fa/.fasta/.faa/.protein，支持复合扩展名)
+input_dir 下蛋白序列（<sample>.pep/.fa/.fasta/.faa/.protein，支持复合扩展名）
     │
-    ├── eggnog-mapper 流程 ─────────────────────────┐
-    │    │                                           │
-    │    ▼                                           │
-    │ 01.eggnog/{sample}.emapper.annotations        │
-    │    │                                           │
-    │    ▼                                           │
-    │ eggnog_processor.py                           │
-    │    │                                           │
-    │    ▼                                           │
-    │ 01.eggnog/{sample}_eggnog.tsv                 │
-    │ 01.eggnog/{sample}_eggnog_highconf.tsv        │
-    │                                                │
-    ├── KofamScan 流程 ─────────────────────────────┤
-    │    │                                           │
-    │    ▼                                           │
-    │ 02.kofam/{sample}_kofam_detail.txt            │
-    │    │                                           │
-    │    ▼                                           │
-    │ KofamScan_processor.py                        │
-    │    │                                           │
-    │    ▼                                           │
-    │ 02.kofam/{sample}_kofam.tsv                   │
-    │ 02.kofam/{sample}_kofam_highconf.tsv          │
-    │                                                │
-    ├── 整合评分流程 ───────────────────────────────┤
-    │    │                                           │
-    │    ▼                                           │
-    │ integrate_annotations.py                      │
-    │    │                                           │
-    │    ▼                                           │
-    │ 03.merge/{sample}_integrated.tsv              │
-    │ 03.merge/{sample}_integrated_report.txt       │
-    │                                                │
-    ├── 结果合并 ───────────────────────────────────┤
-    │    │                                           │
-    │    ▼                                           │
-    │ merge_results.py                              │
-    │    │                                           │
-    │    ▼                                           │
-    │ 03.merge/eggnog_all_samples.tsv               │
-    │ 03.merge/kofam_all_samples.tsv                │
-    │ 03.merge/SUMMARY_REPORT.txt                   │
-    │                                                │
-    └── AI 逐蛋白评估 ──────────────────────────────┘
-         │
-         ▼
-    04.ai/{sample}_ai_report.md
-    04.ai/{sample}_ai_analysis.json
-    04.ai/AI_MULTI_SAMPLE_SUMMARY.md
+    ▼  🔐 MD5 硬性门控（02.input_md5.smk）
+01.qc/md5_check.tsv                ← 有 md5.txt 则比对，无则记录基线 PASS
+    │
+    ├── 03.eggnog.smk ──────────────────────────────┐
+    │    eggnog_mapper ──► 01.eggnog/{sample}.emapper.annotations
+    │    eggnog_processor ──► 01.eggnog/{sample}_eggnog.tsv           │
+    │                         01.eggnog/{sample}_eggnog_highconf.tsv  │
+    │                                                                 │
+    ├── 04.kofamscan.smk ───────────────────────────┤
+    │    kofamscan ──► 02.kofam/{sample}_kofam_detail.txt             │
+    │    kofamscan_processor ──► 02.kofam/{sample}_kofam.tsv          │
+    │                            02.kofam/{sample}_kofam_highconf.tsv │
+    │                                                                 │
+    ├── 05.integrate.smk ───────────────────────────┤
+    │    integrate_annotations ──► 03.merge/{sample}_integrated.tsv   │
+    │                              03.merge/{sample}_integrated_report│
+    │                                                                 │
+    ├── 06.merge.smk ───────────────────────────────┤
+    │    merge_eggnog_results / merge_kofam_results ──► 03.merge/*_all_samples.tsv
+    │    compare_kegg_annotations ──► 03.merge/kegg_consistency.tsv   │
+    │    annotation_summary / merge_summary_report ──► {sample}_summary.txt
+    │                                                  SUMMARY_REPORT.txt
+    │                                                                 │
+    ├── 07.ai_curator.smk（ai: true）───────────────┤
+    │    ai_annotation_curator ──► 04.ai/{sample}_ai_report.md 等     │
+    │                                                                 │
+    ├── 08.deliver.smk ─────────────────────────────┤
+    │    delivery ──► {data_deliver}/delivery_manifest.json/.md5      │
+    │                 {data_deliver}/delivery_details.log             │
+    └── 09.Report.smk ──────────────────────────────┘
+         generate_project_summary ──► project_summary.json
 ```
 
 ### 各步骤说明
 
-| 步骤 | 规则文件 | 工具 | 输入 | 输出 | 说明 |
-|------|---------|------|------|------|------|
-| 1 | 03.eggnog.smk | eggnog-mapper | protein sequences | 01.eggnog/*.annotations | 功能注释 |
-| 2 | 03.eggnog.smk | eggnog_processor | .annotations | 01.eggnog/*_eggnog.tsv | 质量过滤和可信度评估 |
-| 3 | 04.kofamscan.smk | KofamScan | protein sequences | 02.kofam/*_kofam_detail.txt | KO 注释 |
-| 4 | 04.kofamscan.smk | KofamScan_processor | _detail.txt | 02.kofam/*_kofam.tsv | 可信度评估 |
-| 5 | 05.integrate.smk | integrate_annotations | eggnog + kofam TSV | 03.merge/*_integrated.tsv | 横向整合与冲突裁决 |
-| 6 | 06.merge.smk | merge_results | 各样本结果 | 03.merge/*.tsv | 多样本合并与统计 |
-| 7 | 07.ai_curator.smk | ai_curator | eggnog + kofam TSV | 04.ai/*_ai_report.md | 逐蛋白 AI 可靠性评估 |
-| 8 | 08.report.smk | shell | 各步骤结果 | 03.merge/*_summary.txt | 样本摘要报告 |
+| 层 | 规则文件 | 主要 rule | 说明 |
+|----|---------|-----------|------|
+| 通用层 | 01.common.smk | —（输入解析辅助函数） | 无业务 rule |
+| 通用层 | 02.input_md5.smk | input_md5_check | 输入 MD5 硬性门控，产出 `01.qc/md5_check.tsv` |
+| 组学层 | 03.eggnog.smk | eggnog_mapper / eggnog_processor | eggnog-mapper 注释 + 质量过滤与可信度评估 |
+| 组学层 | 04.kofamscan.smk | kofamscan / kofamscan_processor | KofamScan KO 注释 + 可信度评估 |
+| 组学层 | 05.integrate.smk | integrate_annotations | 双工具横向整合与冲突裁决 |
+| 组学层 | 06.merge.smk | merge_eggnog_results / merge_kofam_results / compare_kegg_annotations / annotation_summary / merge_summary_report | 多样本合并、KEGG KO 一致性比对与汇总 |
+| 组学层 | 07.ai_curator.smk | ai_annotation_curator / ai_multi_sample_summary | AI 逐蛋白可靠性评估（可选） |
+| 收尾层 | 08.deliver.smk | delivery | 交付 manifest（copy 模式） |
+| 收尾层 | 09.Report.smk | generate_project_summary | `project_summary.json` |
+
+> 日志与基准：`logs/`、`benchmarks/` 目录编号与 rule 文件号一致（如 `logs/03.eggnog/`、`logs/04.kofam/`）。
 
 ---
 
@@ -243,6 +309,9 @@ snakemake --use-conda --cores 8 \
 ### 输出文件结构
 
 ```
+01.qc/                             # 输入校验
+└── md5_check.tsv                  # 输入 MD5 校验结果（门控文件）⭐
+
 01.eggnog/                         # eggnog-mapper 结果目录
 ├── {sample}.emapper.annotations   # eggnog 原始输出
 ├── {sample}.emapper.hits          # 比对详情
@@ -266,12 +335,23 @@ snakemake --use-conda --cores 8 \
 ├── eggnog_highconf.tsv            # eggnog 高可信度合并
 ├── kofam_all_samples.tsv          # kofam 多样本合并
 ├── kofam_highconf.tsv             # kofam 高可信度合并
+├── kegg_consistency.tsv           # 双工具 KO 一致性逐蛋白比对 ⭐
+├── kegg_consistency_stats.txt     # 一致性统计（一致/冲突/一致率）
 └── SUMMARY_REPORT.txt             # 整体汇总报告
 
-04.ai/                             # AI 分析结果目录
+04.ai/                             # AI 分析结果目录（ai: true 时）
 ├── {sample}_ai_report.md          # AI 逐蛋白评估报告（Markdown）
 ├── {sample}_ai_analysis.json      # 结构化评估数据（JSON）
+├── {sample}_ai_analysis.tsv       # 评估结果 TSV
+├── {sample}_ai_analysis.csv       # 评估结果 CSV
 └── AI_MULTI_SAMPLE_SUMMARY.md     # 多样本 AI 汇总
+
+{data_deliver}/                    # 交付目录（deliver 模块）
+├── delivery_manifest.json         # 交付文件清单（来源、大小、MD5、动作）
+├── delivery_manifest.md5          # 各交付文件 MD5 列表
+└── delivery_details.log           # 逐文件交付日志
+
+project_summary.json               # 项目级摘要（report 模块）
 ```
 
 ### 结果文件格式
@@ -326,6 +406,10 @@ snakemake --use-conda --cores 8 \
 | kofam_ko | KofamScan 的 KO |
 | ... | 其余 eggnog + kofam 原始字段 |
 
+#### 5. `03.merge/kegg_consistency.tsv`
+
+双工具 KO 一致性逐蛋白比对：按 `(sample, query)` 对齐两个软件，去掉 `ko:` 前缀后比较 KO 集合。有交集记 `一致`，均有 KO 但无交集记 `冲突`。下游严格集合取 `status=一致` 且双方均为高置信的记录，冲突记录保留供人工复核。
+
 ### 统计报告解读
 
 #### 处理报告示例 (`*_report.txt`)
@@ -356,7 +440,7 @@ Annotation Coverage:
   With both KEGG and GO: 43 (43.4%)  ← 同时有两者
 ```
 
-#### 可信度评分标准
+### 可信度评分标准
 
 详见 `docs/filtering_standards.md`。简要如下：
 
@@ -365,7 +449,7 @@ Annotation Coverage:
 - Bit-score 评分（0-30分）
 - 注释完整性评分（0-30分，基于 GO/KO/EC/Pfam/CAZy）
 
-**KofamScan_processor**（40-95分）
+**kofamscan_processor**（40-95分）
 - High：通过阈值（`*`）且 score ≥ threshold
 - Medium：未过阈值但 score > 100 或 evalue < 1e-20
 - Low：score < 60 或 evalue > 1e-5
@@ -378,43 +462,46 @@ Annotation Coverage:
 
 ---
 
-## 示例分析
+## 示例分析：test/TD2.1k.pep
 
-### 示例数据: test_sample_100.pep
+**样本信息**: 1000 条蛋白质序列（转录组 ORF 预测产物，含复合命名格式的 FASTA 头）
 
-**样本信息**: 100 条蛋白质序列（来自植物转录组）
+**最小可运行配置**:
 
-**运行命令**:
-```bash
-# 单样本完整分析
-snakemake --use-conda --cores 4 \
-    --config samples=["test_sample_100"] \
-             min_confidence=High \
-             require_kegg=true
+```yaml
+# project.yaml
+project_name: annoflow_test
+species: test_species
+sample_csv: /path/to/samples.csv    # 内容：TD2.1k,TD2.1k（test/ 同结构）
+workflow: /path/to/test_workdir
+data_deliver: /path/to/test_deliver
+input_dir: /path/to/AnnoFlow/test   # 含 TD2.1k.pep
+reference_path: /data/jzhang/reference/AnnoFlow
 ```
 
-**分析结果**:
+**运行**:
 
-| 指标 | 数值 | 说明 |
-|------|------|------|
-| 输入序列 | 100 | 蛋白质序列 |
-| 成功注释 | 99 | 99% 注释率 |
-| 通过质量过滤 | 63 (63.6%) | 符合阈值要求 |
-| 高可信度 | 63 (100%) | 通过过滤的都是 High |
-| 有 KEGG | 63 (100%) | 都有 KO 编号 |
-| 有 GO | 43 (68.3%) | 大部分有 GO |
+```bash
+snakemake -s /path/to/AnnoFlow/snakefile --cores 4 --use-conda --conda-frontend mamba \
+  --rerun-triggers mtime --logger rich-loguru \
+  --config analysisyaml=project.yaml
+```
+
+**查看结果**: `01.qc/md5_check.tsv`（输入校验）→ `01.eggnog/TD2.1k_eggnog_report.txt`（过滤统计）→ `03.merge/SUMMARY_REPORT.txt`（整体汇总）→ `project_summary.json`（项目摘要）。
 
 ---
 
 ## 脚本独立使用
+
+各脚本可脱离 Snakemake 单独运行（环境：`env/py3.12.yaml`）。
 
 ### eggnog_processor.py
 
 ```bash
 # 基本用法
 python3 scripts/eggnog_processor.py \
-    -i 01.eggnog/test_sample_100.emapper.annotations \
-    -o 01.eggnog/test_sample_100_eggnog
+    -i 01.eggnog/TD2.1k.emapper.annotations \
+    -o 01.eggnog/TD2.1k_eggnog
 
 # 高可信度 + KEGG 过滤
 python3 scripts/eggnog_processor.py \
@@ -431,13 +518,13 @@ python3 scripts/eggnog_processor.py \
     --bitscore 80
 ```
 
-### KofamScan_processor.py
+### kofamscan_processor.py
 
 ```bash
-python3 scripts/KofamScan_processor.py \
-    -i 02.kofam/test_sample_100_kofam_detail.txt \
-    -o 02.kofam/test_sample_100_kofam \
-    -e 01.eggnog/test_sample_100.emapper.annotations \
+python3 scripts/kofamscan_processor.py \
+    -i 02.kofam/TD2.1k_kofam_detail.txt \
+    -o 02.kofam/TD2.1k_kofam \
+    -e 01.eggnog/TD2.1k.emapper.annotations \
     --min-confidence High
 ```
 
@@ -445,10 +532,10 @@ python3 scripts/KofamScan_processor.py \
 
 ```bash
 python3 scripts/integrate_annotations.py \
-    -e 01.eggnog/test_sample_100_eggnog.tsv \
-    -k 02.kofam/test_sample_100_kofam.tsv \
-    -s test_sample_100 \
-    -o 03.merge/test_sample_100
+    -e 01.eggnog/TD2.1k_eggnog.tsv \
+    -k 02.kofam/TD2.1k_kofam.tsv \
+    -s TD2.1k \
+    -o 03.merge/TD2.1k
 ```
 
 ### merge_results.py
@@ -477,7 +564,7 @@ python3 scripts/merge_results.py \
 
 ## AI 注释分析功能
 
-KEGG Annotation Pipeline 支持 AI 驱动的**逐蛋白可靠性评估**，而非仅样本级汇总统计。
+AnnoFlow 支持 AI 驱动的**逐蛋白可靠性评估**（模块开关 `ai: true`，默认关闭），而非仅样本级汇总统计。
 
 ### 功能特点
 
@@ -512,13 +599,12 @@ ollama pull llama3.2
 curl http://localhost:11434/api/tags
 ```
 
-#### 2. 启用 AI 分析
-
-编辑 `conf/ai.yaml`:
+#### 2. 在 analysisyaml 中启用 AI
 
 ```yaml
-ai:
-  enabled: true
+# project.yaml
+ai: true                 # 模块开关（替代旧版的 enabled 开关）
+ai_config:
   provider: "ollama"
   model: "llama3.2"
   taxonomy: "Bacteria;Firmicutes;Bacillales"  # 你的物种分类
@@ -530,15 +616,15 @@ ai:
 
 ```bash
 # 运行完整流程（包含 AI 分析）
-snakemake --use-conda --cores 8
+snakemake -s /path/to/AnnoFlow/snakefile --cores 8 --use-conda --conda-frontend mamba \
+  --config analysisyaml=/path/to/project.yaml
 
 # 或仅运行 AI 分析（已有注释结果时）
-snakemake --use-conda --cores 8 ai_analysis
+snakemake -s /path/to/AnnoFlow/snakefile --cores 8 --use-conda --conda-frontend mamba \
+  --config analysisyaml=/path/to/project.yaml ai_analysis
 ```
 
 ### 输出结果
-
-AI 分析会生成以下文件：
 
 ```
 04.ai/
@@ -570,7 +656,7 @@ AI 分析会生成以下文件：
 
 ### 分层筛选策略说明
 
-为控制 Token 成本，`ai_curator.py` 默认开启**分层筛选**（可用 `--no-auto-filter` 关闭）：
+为控制 Token 成本，`ai_curator.py` 默认开启**分层筛选**（可将 `ai_config.no_auto_filter` 设为 `true` 关闭）：
 
 | 分类 | 判定标准 | 处理方式 | Token 消耗 |
 |------|----------|----------|-----------|
@@ -578,7 +664,7 @@ AI 分析会生成以下文件：
 | **低质量** | `e-value > 1e-3` **或** `Kofam ratio < 0.5` | 规则直接 `Reject` | 0 |
 | **模糊区域** | 其余蛋白 | 送 AI 评估 | 有 |
 
-这意味着对于一个 3000 蛋白的基因组，可能只有 300-600 个蛋白进入模糊区域，再按 `--max-proteins` 限制后，实际 API 调用可能只有几十个，大幅降低成本。
+这意味着对于一个 3000 蛋白的基因组，可能只有 300-600 个蛋白进入模糊区域，再按 `max_proteins` 限制后，实际 API 调用可能只有几十个，大幅降低成本。
 
 ---
 
@@ -592,7 +678,7 @@ AI 分析会生成以下文件：
 
 | 方式 | 风险等级 | 说明 |
 |------|---------|------|
-| 明文写在 config.yaml | 🔴 极高 | 可能被提交到 Git，泄露密钥 |
+| 明文写在 yaml 配置 | 🔴 极高 | 可能被提交到 Git，泄露密钥 |
 | 命令行参数传递 | 🟠 高 | 会被记录在 shell 历史和进程列表 |
 | 环境变量（✅ 推荐） | 🟢 低 | 只在内存中存在，不会持久化到文件 |
 
@@ -609,11 +695,11 @@ echo 'export AI_API_KEY="sk-your-actual-api-key"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-##### 步骤 2：在配置中只写变量名
+##### 步骤 2：在 ai_config 中只写变量名
 
 ```yaml
-ai:
-  enabled: true
+ai: true
+ai_config:
   provider: "openai"
   model: "glm-4.7"
   api_key: "AI_API_KEY"      # ← ✅ 只写变量名，不写真实 key
@@ -623,17 +709,19 @@ ai:
 ##### 步骤 3：运行分析
 
 ```bash
-snakemake --use-conda --cores 8
+snakemake -s /path/to/AnnoFlow/snakefile --cores 8 --use-conda --conda-frontend mamba \
+  --config analysisyaml=/path/to/project.yaml
 ```
 
 ### 🔐 安全机制说明
 
 本流程已实施以下安全措施：
 
-1. **配置文件安全**：脚本会检测 `api_key` 是否为全大写的环境变量名格式，如果是，从环境变量读取而非直接使用
+1. **配置占位检测**：`api_key` 约定为全大写环境变量名格式，脚本从环境变量读取真实值；真实 key 永不入库
 2. **命令行保护**：即使通过命令行传入 key，也会立即转移到环境变量，避免在 `ps` 进程列表中暴露
 3. **日志脱敏**：API key 不会出现在任何日志文件中，日志只显示 `长度: 32` 而非真实内容
-4. **Git 保护**：`.gitignore` 已包含 `.env`、`*.log`、`test/` 产物等，防止意外提交敏感信息
+4. **Git 保护**：`.gitignore` 已包含 `.env`、`*.log`、运行产物等，防止意外提交敏感信息
+5. **监控配置同策略**：`monitor_config.yaml` 的 token / signing key 一律用 `${ENV_VAR}` 引用
 
 ### 使用不同云平台
 
@@ -644,8 +732,8 @@ export DASHSCOPE_API_KEY="sk-your-dashscope-key"
 ```
 
 ```yaml
-ai:
-  enabled: true
+ai: true
+ai_config:
   provider: "openai"  # 阿里云使用兼容模式
   model: "glm-4.7"
   api_key: "DASHSCOPE_API_KEY"
@@ -659,8 +747,8 @@ export OPENAI_API_KEY="sk-your-openai-key"
 ```
 
 ```yaml
-ai:
-  enabled: true
+ai: true
+ai_config:
   provider: "openai"
   model: "gpt-4"
   api_key: "OPENAI_API_KEY"
@@ -675,13 +763,33 @@ ollama serve
 ```
 
 ```yaml
-ai:
-  enabled: true
+ai: true
+ai_config:
   provider: "ollama"
   model: "llama3.2"
   # api_key 留空
   # api_base: "http://localhost:11434"
 ```
+
+---
+
+## 从旧版迁移
+
+本流程由早期 KEGG 注释流程（kegg annotation pipeline 仓库）重构而来并更名 AnnoFlow。旧项目升级要点：
+
+| 旧版 | AnnoFlow |
+|------|----------|
+| `conf` 目录四份配置（config / resource / parameter / ai） | `config` 目录四件套：`config.yaml`（默认）+ `reference.yaml` + `run_parameter.yaml` + `cluster_config.yaml`；项目级差异写入 analysisyaml |
+| 根目录示例配置 | `examples/analysisyaml.example.yaml` |
+| 配置里的 `samples:` 样本列表 | 样本表 CSV（模板 `config/samples.csv`，两列 `sample,sample_name`），经 `sample_csv` 指定 |
+| AI 的 `enabled` 开关（`ai` 段内） | 顶层模块开关 `ai: true` + 同级 `ai_config:` 段（provider / model / api_key / api_base / taxonomy / max_proteins / no_auto_filter） |
+| 大写驼峰命名的 KofamScan 处理脚本 | `scripts/kofamscan_processor.py`（全小写） |
+| 通用 Python 环境文件（基于 python3 命名） | `env/py3.12.yaml` |
+| 规则文件 02.config / 08.report | 已删除：配置集中在 snakefile 入口，规则重新编号 01-09，新增 02.input_md5（MD5 门控）、08.deliver（交付）、09.Report |
+| 100 条蛋白的旧测试样本 | `test/TD2.1k.pep`（1000 条蛋白序列） |
+| 直接 `snakemake --use-conda` | 标准命令：`-s <AnnoFlow>/snakefile --use-conda --conda-frontend mamba --rerun-triggers mtime --logger rich-loguru --config analysisyaml=<project.yaml>` |
+
+迁移步骤：准备数据库目录（`dataset/eggnog-mapper` + `dataset/kegg_<date>_ko_dataset`）→ 将旧样本列表改写为 `samples.csv` → 按 `examples/analysisyaml.example.yaml` 填写七项必填配置 → dry-run 验证 → 正式运行。
 
 ---
 
@@ -693,18 +801,21 @@ A: 首次运行时需要下载并创建 Conda 环境，可能需要 10-30 分钟
 
 ### Q2: eggnog-mapper 找不到数据库？
 
-A: 确保在 `conf/config.yaml` 中正确设置了 `eggnog_data_dir`，且该目录包含 `eggnog.db` 等数据库文件。
+A: 确认 analysisyaml 中的 `reference_path` 指向参考目录根，且其下存在 `dataset/eggnog-mapper/`（含 `eggnog.db`）与 `dataset/kegg_<date>_ko_dataset/`。参考路径在启动时 fail-fast 检查，先跑 dry-run（`-n`）即可暴露路径错误。
 
 ### Q3: 如何只处理已有结果，不重新跑注释？
 
 A: 已有 `01.eggnog/*.emapper.annotations` 后，可直接运行后续处理步骤：
+
 ```bash
-snakemake --use-conda --cores 4 annotate
+snakemake -s /path/to/AnnoFlow/snakefile --cores 4 --use-conda --conda-frontend mamba \
+  --config analysisyaml=/path/to/project.yaml annotate
 ```
 
 ### Q4: 如何调整过滤严格程度？
 
-A: 修改 `conf/config.yaml` 中的参数：
+A: 在 analysisyaml 中覆盖 `run_parameter.yaml` 的阈值键：
+
 ```yaml
 # 严格模式
 evalue_threshold: 1.0e-10
@@ -719,31 +830,26 @@ min_confidence: "Medium"
 
 ### Q5: 多样本如何合并分析？
 
-A: 在配置文件中列出所有样本：
-```yaml
-samples:
-  - sample1
-  - sample2
-  - sample3
-```
-运行 `snakemake --use-conda --cores 8` 后会自动生成 `03.merge/` 目录下的合并结果。
+A: 在 `samples.csv` 中每行一个样本，运行后自动生成 `03.merge/` 下的合并结果与 `SUMMARY_REPORT.txt`。
 
 ### Q6: AI 分析为什么没有评估所有蛋白？
 
-A: 这是正常的成本控制设计。默认开启分层筛选：高置信和低质量蛋白由规则直接判定，只有模糊区域才送 AI。如需全量评估，在 `conf/ai.yaml` 中把 `max_proteins` 调大，或在命令行覆盖：
-```bash
-snakemake --use-conda --cores 4 --config ai.max_proteins=200 ai_analysis
-```
-（注意：全量评估会消耗大量 Token）
+A: 这是正常的成本控制设计。默认开启分层筛选：高置信和低质量蛋白由规则直接判定，只有模糊区域才送 AI。如需扩大评估量，在 analysisyaml 的 `ai_config` 中调大 `max_proteins`；全量评估则设 `no_auto_filter: true`（⚠️ 会消耗大量 Token）。
 
 ### Q7: 输入文件名带复合扩展名（如 `.fa.TD2.1k.pep`）如何配置？
 
-A: `get_input_file()` 已支持复合扩展名。只需在 `samples` 中写基础名即可：
-```yaml
-samples:
-  - rnabloom_transcript_LongOrfs
+A: 输入解析已支持复合扩展名。样本表 `sample` 列写基础名即可：
+
+```csv
+sample,sample_name
+rnabloom_transcript_LongOrfs,RNA-Bloom ORFs
 ```
+
 系统会自动匹配 `rnabloom_transcript_LongOrfs.fa.TD2.1k.pep`。
+
+### Q8: 为什么 `--config ai=false` 关不掉 AI 模块？
+
+A: 命令行 `--config` 的布尔值会被解析为字符串，非空字符串恒为真。关闭模块请在 analysisyaml 中写 `ai: false`（其余模块开关同理）。
 
 ---
 
@@ -762,6 +868,7 @@ samples:
 ## 文档与参考
 
 - **过滤标准详解**: 见 `docs/filtering_standards.md`
+- **项目级配置示例**: 见 `examples/analysisyaml.example.yaml`
 - **Snakemake 官方文档**: https://snakemake.readthedocs.io/
 - **eggnog-mapper 文档**: https://github.com/eggnogdb/eggnog-mapper
 - **KofamScan 文档**: https://www.genome.jp/tools/kofamkoala/
@@ -770,10 +877,9 @@ samples:
 
 ## 依赖
 
-- Python 3.8+
-- pandas, loguru, rich, requests
-- eggnog-mapper 2.1.13
-- KofamScan 1.3.0
+- Python 3.12（`env/py3.12.yaml`：pandas, loguru, rich, requests 等）
+- eggnog-mapper 2.1.13（`env/eggnog-mapper.yaml`）
+- KofamScan 1.3.0（`env/kofamscan.yaml`）
 - Snakemake 9.9.0+
 - Conda/Mamba
 

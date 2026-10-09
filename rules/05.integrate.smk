@@ -1,5 +1,5 @@
 # =============================================================================
-# Integrate eggnog + KofamScan annotations with scoring system
+# AnnoFlow - 05. eggnog + KofamScan 整合评分
 # =============================================================================
 # 对每个样本，将 eggnog 和 KofamScan 的结果横向整合，并计算综合评分
 # =============================================================================
@@ -15,13 +15,13 @@ rule integrate_annotations:
         tsv = "03.merge/{sample}_integrated.tsv",
         report = "03.merge/{sample}_integrated_report.txt"
     conda:
-        workflow.source_path("../env/python3.yaml"),
+        workflow.source_path("../env/py3.12.yaml")
     resources:
         **rule_resource(config, 'low_resource', skip_queue_on_local=True, logger=logger)
     log:
-        "logs/03.merge/{sample}_integrate.log"
+        "logs/05.merge/{sample}_integrate.log"
     benchmark:
-        "benchmarks/03.merge/{sample}_integrate.txt"
+        "benchmarks/05.merge/{sample}_integrate.txt"
     message:
         "🔗 Integrating annotations for {wildcards.sample}"
     shell:

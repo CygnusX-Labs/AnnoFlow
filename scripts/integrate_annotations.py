@@ -1,4 +1,4 @@
-integrate_annotations#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 Integrate eggnog and KofamScan annotation results with scoring system.
 对 eggnog 和 KofamScan 注释结果进行整合，并给出综合评分。
@@ -6,10 +6,8 @@ Integrate eggnog and KofamScan annotation results with scoring system.
 
 import argparse
 import sys
-import os
 import re
 from pathlib import Path
-from collections import Counter
 
 try:
     import pandas as pd
@@ -325,7 +323,7 @@ def main():
     output_report = f"{args.output}_integrated_report.txt"
 
     integrated_df.to_csv(output_tsv, sep='\t', index=False)
-    logger.success(f"整合结果已保存: {output_tsv} ({len(integrated_df)} 条)")
+    logger.info(f"整合结果已保存: {output_tsv} ({len(integrated_df)} 条)")
 
     generate_report(integrated_df, args.sample, output_report)
 

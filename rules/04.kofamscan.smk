@@ -1,5 +1,5 @@
 # =============================================================================
-# KofamScan Rules
+# AnnoFlow - 04. KofamScan KO 注释规则
 # =============================================================================
 
 rule kofamscan:
@@ -7,7 +7,8 @@ rule kofamscan:
     Run KofamScan for KO annotation.
     """
     input:
-        get_input_file
+        gate="01.qc/md5_check.tsv",
+        seqs=get_input_file,
     output:
         formatted = "02.kofam/{sample}_kofam_temp.fa",
         detail = "02.kofam/{sample}_kofam_detail.txt",
@@ -23,17 +24,17 @@ rule kofamscan:
     resources:
         **rule_resource(config, 'high_resource', skip_queue_on_local=True, logger=logger)
     log:
-        "logs/02.kofam/{sample}_kofamscan.log"
+        "logs/04.kofam/{sample}_kofamscan.log"
     benchmark:
-        "benchmarks/02.kofam/{sample}_kofamscan.txt"
+        "benchmarks/04.kofam/{sample}_kofamscan.txt"
     message:
         "🎯 Running KofamScan on {wildcards.sample}"
     shell:
         """
         mkdir -p {params.tmp_dir}
 
-        awk '/^>/{{print; next}} {{gsub(/[*]/,""); gsub(/[.]/,""); print}}' {input} > {output.formatted}
-        
+        awk '/^>/{{print; next}} {{gsub(/[*]/,""); gsub(/[.]/,""); print}}' {input.seqs} > {output.formatted}
+
         exec_annotation \
             -o {output.detail} \
             --ko-list {params.ko_list} \
@@ -43,7 +44,7 @@ rule kofamscan:
             -f detail \
             {output.formatted} \
             > {log} 2>&1
-        
+
         exec_annotation \
             -o {output.tsv} \
             --ko-list {params.ko_list} \
@@ -53,7 +54,7 @@ rule kofamscan:
             -f mapper \
             {output.formatted} \
             >> {log} 2>&1
-        
+
         rm -rf {params.tmp_dir}
         """
 
@@ -69,16 +70,16 @@ rule kofamscan_processor:
         high_conf = "02.kofam/{sample}_kofam_highconf.tsv",
         report = "02.kofam/{sample}_kofam_report.txt"
     conda:
-        workflow.source_path("../env/python3.yaml")
+        workflow.source_path("../env/py3.12.yaml")
     params:
         output_prefix = "02.kofam/{sample}_kofam",
         min_confidence = MIN_CONFIDENCE
     resources:
         **rule_resource(config, 'default', skip_queue_on_local=True, logger=logger)
     log:
-        "logs/02.kofam/{sample}_kofam_processor.log"
+        "logs/04.kofam/{sample}_kofam_processor.log"
     benchmark:
-        "benchmarks/02.kofam/{sample}_kofam_processor.txt"
+        "benchmarks/04.kofam/{sample}_kofam_processor.txt"
     message:
         "📊 Processing KofamScan for {wildcards.sample}"
     shell:

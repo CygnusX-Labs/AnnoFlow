@@ -1,0 +1,34 @@
+# =============================================================================
+# AnnoFlow - HPC 资源 profile（§3.4 / §9）
+# =============================================================================
+# resource_profiles 的 queue_type 经 clusters 段映射为实际队列名；
+# cluster 模式下 clusters 缺失必须 fail-fast（§3.4）。
+# very_high_resource 的 mem_mb/threads 必须 >= high_resource。
+
+resource_profiles:
+  low_resource:
+    threads: 2
+    mem_mb: 4000
+    runtime: 30
+    queue_type: short
+  default:
+    threads: 8
+    mem_mb: 8000
+    runtime: 60
+    queue_type: short
+  high_resource:
+    threads: 16
+    mem_mb: 32000
+    runtime: 240
+    queue_type: medium
+  very_high_resource:
+    threads: 32
+    mem_mb: 64000
+    runtime: 480
+    queue_type: long
+
+# queue_type → 实际队列名映射（按本机集群实际修改，经 analysisyaml 覆盖）
+clusters:
+  short: normal
+  medium: normal
+  long: long

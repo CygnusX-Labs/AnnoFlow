@@ -26,6 +26,11 @@ logger.add(sys.stderr, format="<green>{time:HH:mm:ss}</green> | <level>{level: <
 console = Console()
 
 
+def has_annotation(series):
+    """Return a boolean mask for non-empty annotation values."""
+    return ~series.fillna('').astype(str).str.strip().str.lower().isin(['', '-', 'nan', 'none', 'na'])
+
+
 def merge_eggnog_results(input_dir, samples, output_all, output_high, output_stats):
     """合并 eggnog 处理结果"""
     
@@ -63,24 +68,32 @@ def merge_eggnog_results(input_dir, samples, output_all, output_high, output_sta
                 all_records.append(df_all)
                 
                 # 统计
-                total_count = len(df_all)
-                kegg_count = df_all['kegg_ko'].ne('-').sum() if 'kegg_ko' in df_all.columns else 0
-                go_count = df_all['gos'].ne('-').sum() if 'gos' in df_all.columns else 0
+                proteins = df_all.groupby('query', sort=False)
+                total_count = proteins.ngroups
+                kegg_mask = has_annotation(df_all['kegg_ko']) if 'kegg_ko' in df_all.columns else pd.Series(False, index=df_all.index)
+                go_mask = has_annotation(df_all['gos']) if 'gos' in df_all.columns else pd.Series(False, index=df_all.index)
+                annotations = pd.DataFrame({'query': df_all['query'], 'kegg': kegg_mask, 'go': go_mask}).groupby('query').any()
+                kegg_count = annotations['kegg'].sum()
+                go_count = annotations['go'].sum()
                 
                 # 读取高可信度结果
                 high_count = 0
                 if os.path.exists(high_file):
-                    df_high = pd.read_csv(high_file, sep='\t', low_memory=False)
+                    df_high = pd.read_csv(high_file, sep='\t', low_memory=False, comment='#')
                     df_high['sample'] = sample
                     high_conf_records.append(df_high)
-                    high_count = len(df_high)
+                    high_count = df_high['query'].nunique()
                 
                 sample_stats.append({
                     'sample': sample,
                     'total': total_count,
                     'high_confidence': high_count,
                     'with_kegg': int(kegg_count),
-                    'with_go': int(go_count)
+                    'with_go': int(go_count),
+                    'kegg_and_go': int((annotations['kegg'] & annotations['go']).sum()),
+                    'kegg_only': int((annotations['kegg'] & ~annotations['go']).sum()),
+                    'go_only': int((~annotations['kegg'] & annotations['go']).sum()),
+                    'neither': int((~annotations['kegg'] & ~annotations['go']).sum())
                 })
                 
                 logger.info(f"{sample}: 总计={total_count}, 高可信={high_count}, KEGG={int(kegg_count)}, GO={int(go_count)}")
@@ -112,17 +125,17 @@ def merge_eggnog_results(input_dir, samples, output_all, output_high, output_sta
     
     with open(output_stats, 'w') as f:
         f.write("样本详细统计:\n")
+        f.write("Total = 处理后表中的唯一蛋白 query 数，不是输入 FASTA 总数，也不是 KEGG + GO。\n")
+        f.write("With KEGG 与 With GO 可以重叠；Both + KEGG only + GO only + Neither = Total。\n")
         f.write("-" * 70 + "\n")
-        f.write(f"{'Sample':<20} {'Total':<10} {'High Conf':<12} {'With KEGG':<12} {'With GO':<10}\n")
+        f.write("Sample\tTotal\tHigh Conf\tWith KEGG\tWith GO\tBoth\tKEGG only\tGO only\tNeither\n")
         f.write("-" * 70 + "\n")
         
         for stat in sample_stats:
-            f.write(f"{stat['sample']:<20} {stat['total']:<10} {stat['high_confidence']:<12} "
-                   f"{stat['with_kegg']:<12} {stat['with_go']:<10}\n")
+            f.write('\t'.join(str(stat[key]) for key in ['sample', 'total', 'high_confidence', 'with_kegg', 'with_go', 'kegg_and_go', 'kegg_only', 'go_only', 'neither']) + '\n')
         
         f.write("-" * 70 + "\n")
-        f.write(f"{'TOTAL':<20} {df_stats['total'].sum():<10} {df_stats['high_confidence'].sum():<12} "
-               f"{df_stats['with_kegg'].sum():<12} {df_stats['with_go'].sum():<10}\n")
+        f.write('TOTAL\t' + '\t'.join(str(df_stats[key].sum()) for key in ['total', 'high_confidence', 'with_kegg', 'with_go', 'kegg_and_go', 'kegg_only', 'go_only', 'neither']) + '\n')
         f.write("-" * 70 + "\n")
     
     logger.success(f"统计报告: {output_stats}")
@@ -193,15 +206,15 @@ def merge_kofam_results(input_dir, samples, output_all, output_high, output_stat
                 df_all['sample'] = sample
                 all_records.append(df_all)
                 
-                total_count = len(df_all)
+                total_count = df_all['query'].nunique()
                 
                 # 读取高可信度结果
                 high_count = 0
                 if os.path.exists(high_file):
-                    df_high = pd.read_csv(high_file, sep='\t', low_memory=False)
+                    df_high = pd.read_csv(high_file, sep='\t', low_memory=False, comment='#')
                     df_high['sample'] = sample
                     high_conf_records.append(df_high)
-                    high_count = len(df_high)
+                    high_count = df_high['query'].nunique()
                 
                 sample_stats.append({
                     'sample': sample,

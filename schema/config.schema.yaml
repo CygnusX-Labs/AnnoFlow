@@ -1,0 +1,152 @@
+$schema: "https://json-schema.org/draft/2020-12/schema"
+title: "AnnoFlow Configuration Schema"
+description: "Schema for validating the merged AnnoFlow pipeline configuration (Flow framework §3.5)"
+type: object
+
+required:
+  - project_name
+  - species
+  - sample_csv
+  - workflow
+  - data_deliver
+  - input_dir
+  - reference_path
+
+properties:
+  # ─── 项目元数据 ───
+  project_name:
+    type: string
+    minLength: 1
+  species:
+    type: string
+    minLength: 1
+    description: "Species name, used by AI taxonomy checks and reports"
+  client:
+    type: string
+
+  # ─── 路径（必须绝对路径，§3.2）───
+  sample_csv:
+    type: string
+    minLength: 1
+  workflow:
+    type: string
+    minLength: 1
+  data_deliver:
+    type: string
+    minLength: 1
+  input_dir:
+    type: string
+    minLength: 1
+    description: "Directory containing input protein sequence files"
+  reference_path:
+    type: string
+    minLength: 1
+    description: "Site-level reference DB root (config/reference.yaml placeholder overridden per project)"
+
+  # ─── 执行模式 ───
+  execution_mode:
+    type: string
+    enum: ["local", "cluster"]
+    default: local
+  queue_id:
+    type: string
+
+  # ─── 模块开关（与 config/config.yaml 读取键完全一致，§3.3）───
+  eggnog:
+    type: boolean
+    default: true
+  kofamscan:
+    type: boolean
+    default: true
+  integrate:
+    type: boolean
+    default: true
+  merge:
+    type: boolean
+    default: true
+  ai:
+    type: boolean
+    default: false
+  deliver:
+    type: boolean
+    default: true
+  report:
+    type: boolean
+    default: true
+
+  # ─── 流程控制 ───
+  pipeline_version:
+    type: string
+  print_target:
+    type: boolean
+    default: false
+  log_level:
+    type: string
+    enum: ["DEBUG", "INFO", "WARNING", "ERROR"]
+    default: INFO
+
+  # ─── 输入门控 ───
+  raw_data:
+    type: object
+    properties:
+      md5:
+        type: string
+    additionalProperties: true
+
+  # ─── 运行参数 ───
+  eggnog_cpu:
+    type: integer
+    minimum: 1
+  kofam_cpu:
+    type: integer
+    minimum: 1
+  evalue_threshold:
+    type: number
+  bitscore_threshold:
+    type: number
+  min_confidence:
+    type: string
+    enum: ["High", "Medium", "Low"]
+  require_kegg:
+    type: boolean
+  require_go:
+    type: boolean
+
+  # ─── 数据库参考键（resolve_reference_paths 解析，§2.4）───
+  eggnog_data_dir:
+    type: string
+  kofam_ko_list:
+    type: string
+  kofam_profiles:
+    type: string
+
+  # ─── AI 设置 ───
+  ai_config:
+    type: object
+    properties:
+      provider:
+        type: string
+        enum: ["ollama", "openai", "claude"]
+      model:
+        type: string
+      api_key:
+        type: string
+        description: "Environment variable NAME placeholder only (e.g. AI_API_KEY), never a real key"
+      api_base:
+        type: string
+      taxonomy:
+        type: string
+      max_proteins:
+        type: integer
+        minimum: 1
+      no_auto_filter:
+        type: boolean
+    additionalProperties: true
+
+  # ─── 脚本路径表 ───
+  scripts:
+    type: object
+    additionalProperties:
+      type: string
+
+additionalProperties: true

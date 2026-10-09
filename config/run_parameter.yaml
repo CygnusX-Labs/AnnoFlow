@@ -1,0 +1,14 @@
+# =============================================================================
+# AnnoFlow - 运行参数（线程与过滤阈值）
+# =============================================================================
+
+# CPU 线程配置
+eggnog_cpu: 8        # eggnog-mapper 线程数（计算密集型，参考 cluster_config high_resource）
+kofam_cpu: 8         # KofamScan 线程数
+
+# 质量过滤阈值（详见 docs/filtering_standards.md）
+evalue_threshold: 1.0e-5      # E-value 阈值（越小越严格）
+bitscore_threshold: 60        # Bit-score 阈值（越大越严格）
+min_confidence: "High"        # 最低可信度: High | Medium | Low
+require_kegg: true            # 是否要求必须有 KEGG 注释
+require_go: false             # 是否要求必须有 GO 注释

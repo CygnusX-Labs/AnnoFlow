@@ -1,0 +1,6 @@
+# AnnoFlow 样本表模板（§8）
+# sample:      样本唯一标识（用于文件命名），匹配 input_dir 下
+#              <sample>.pep/.fa/.fasta/.faa/.protein，支持复合扩展名（如 .fa.TD2.1k.pep）
+# sample_name: 显示名称（可选，用于报告）
+sample,sample_name
+TD2.1k,TD2.1k

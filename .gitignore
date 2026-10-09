@@ -1,10 +1,16 @@
-# 注释数据库文件 - 大型数据集不需要提交到git
-dataset/
+# =============================================================================
+# AnnoFlow .gitignore
+# =============================================================================
 
-# 临时文件
-tmp/
+# Snakemake 运行状态
+.snakemake/
 
-# Python相关
+# 日志与基准（§1.3 命名规范 logs/<NN>.<module>/、benchmarks/<NN>.<module>/）
+logs/
+benchmarks/
+*.log
+
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -12,8 +18,6 @@ __pycache__/
 .Python
 venv/
 ENV/
-
-# Python 虚拟环境（在根目录的 env/）
 build/
 develop-eggs/
 dist/
@@ -30,40 +34,34 @@ wheels/
 .installed.cfg
 *.egg
 
-# 编辑器相关
+# 编辑器与系统
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-
-# 系统文件
 .DS_Store
 Thumbs.db
 
-# 日志文件
-*.log
-logs/
-
-# 环境变量文件（包含敏感信息如 API key）
+# 环境变量文件（含敏感信息，如 API key）
 .env
 .env.local
 .env.*.local
 
-# Snakemake
-.snakemake/
+# 注释数据库（大型数据集，经 reference.yaml 指向仓库外）
+dataset/
 
-# 分析结果（大文件）
+# 真实运行目录与交付产物
+runs/
 results/
-logs/
-benchmarks/
+tmp/
 
-# 样本输出目录
+# 样本输出目录（workflow 目录下按步骤编号的结果）
 */eggnog/
 */kofam/
 merged/
 
-# test/ 目录下测试生成的产物
+# test/ 目录下测试生成的产物（测试输入如 test/*.pep 必须保留并提交）
 test/*.tsv
 test/*_highconf.tsv
 test/*_multi_KO_genes.tsv
@@ -75,46 +73,5 @@ test/temp/
 test/.python-version
 test/*.log
 
-# 注释数据库文件 - 大型数据集
-dataset/
-
-# 临时文件
-tmp/
-
-# Python相关
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-venv/
-ENV/
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# 编辑器相关
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# 系统文件
-.DS_Store
-Thumbs.db
-
-# 日志文件
-*.log
+# 交付目录
+02.data_deliver/

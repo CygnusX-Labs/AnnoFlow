@@ -3,7 +3,7 @@
 """
 Pipeline Logger Utility
 =======================
-Unified logging interface for KEGG Annotation Pipeline.
+Unified logging interface for AnnoFlow.
 Supports rich-loguru, standard loguru, and builtin logging.
 """
 
@@ -42,7 +42,7 @@ except ImportError:
         
         def get_pipeline_logger():
             """Get the builtin logger instance."""
-            logger = logging.getLogger('kegg_annotation')
+            logger = logging.getLogger('annoflow')
             logger.setLevel(logging.INFO)
             
             if not logger.handlers:

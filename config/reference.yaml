@@ -1,0 +1,18 @@
+# =============================================================================
+# AnnoFlow - 注释数据库参考路径（§3.1.1 参考集中管理）
+# =============================================================================
+# 部署方式：准备参考目录（如 /data/reference/AnnoFlow，含 dataset/ 子目录）
+#   → 在 analysisyaml 中设置 reference_path（绝对路径）→ dry-run 验证路径可达。
+# 入库默认值必须为空/占位（§1.3），站点真实路径一律经 analysisyaml 或 --config 覆盖。
+#
+# 目录结构约定（与 /data/<site>/reference/AnnoFlow 对应）:
+#   dataset/eggnog-mapper/                    eggnog-mapper 数据库（eggnog.db 等）
+#   dataset/kegg_<date>_ko_dataset/ko_list    KofamScan KO 阈值列表
+#   dataset/kegg_<date>_ko_dataset/profiles/  KofamScan HMM profiles
+
+reference_path: ""
+
+# 以下路径相对 reference_path 解析；写成绝对路径则直接使用
+eggnog_data_dir: "dataset/eggnog-mapper"
+kofam_ko_list: "dataset/kegg_2026-02-01_ko_dataset/ko_list"
+kofam_profiles: "dataset/kegg_2026-02-01_ko_dataset/profiles"

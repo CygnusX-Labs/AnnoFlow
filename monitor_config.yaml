@@ -1,0 +1,27 @@
+# =============================================================================
+# AnnoFlow - OmicHub 工作流监控推送配置（§13.5，可选）
+# =============================================================================
+# 生产环境运行时与 --logger rich-loguru 配合使用：
+#   snakemake -s snakefile --cores 8 --use-conda \
+#     --logger rich-loguru \
+#     --config analysisyaml=... monitor_conf=monitor_config.yaml
+#
+# 敏感值（token / signing key / encryption key）一律用 ${ENV_VAR} 形式引用
+# 环境变量，禁止写入真实值（与 ai_config.api_key 同一安全策略）。
+
+# Loki 兼容端点（可选，第一期兼容方案）
+# loki_url: "http://<host>:8000/api/v1/workflow-monitor"
+# project_name: "<task_id>"
+
+# OmicHub 原生事件端点（推荐）
+# omichub_monitor_url: "https://omichub.example.edu/api/v1/workflow-monitor/events"
+# omichub_monitor_token: "${OMICHUB_WORKFLOW_MONITOR_TOKEN}"
+# omichub_task_id: "<task_id>"          # 建议等于 project_name
+# omichub_flow_id: "anno"               # AnnoFlow 流程标识
+# omichub_user_id: "<user_id>"
+
+# 生产环境安全加固
+# omichub_monitor_sign_requests: true
+# omichub_monitor_signing_key: "${OMICHUB_WORKFLOW_MONITOR_SIGNING_KEY}"
+# omichub_monitor_encrypt_payload: false
+# omichub_monitor_encryption_key: "${OMICHUB_WORKFLOW_MONITOR_ENCRYPTION_KEY}"

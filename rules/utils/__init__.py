@@ -1,20 +1,32 @@
 #!/usr/bin/env python3
 # *---utf-8---*
 """
-KEGG Annotation Pipeline - Utility Functions
-=============================================
-This module contains utility functions for the KEGG annotation pipeline.
+AnnoFlow - Utility Functions
+=============================
 """
 
-from .resolve_db_paths import resolve_db_paths, check_db_paths
-from .validate import load_user_config
+from .exceptions import AnnoFlowError, ConfigError, SampleSheetError, ReferenceError
+from .validate import load_user_config, validate_species
+from .id_convert import load_samples
+from .reference_update import (
+    DB_PATH_KEYS,
+    resolve_reference_paths,
+    check_reference_paths,
+)
 from .resource_manager import rule_resource
 from .logger import get_pipeline_logger
 
 __all__ = [
-    'resolve_db_paths',
-    'check_db_paths', 
-    'load_user_config',
-    'rule_resource',
-    'get_pipeline_logger'
+    "AnnoFlowError",
+    "ConfigError",
+    "SampleSheetError",
+    "ReferenceError",
+    "load_user_config",
+    "validate_species",
+    "load_samples",
+    "DB_PATH_KEYS",
+    "resolve_reference_paths",
+    "check_reference_paths",
+    "rule_resource",
+    "get_pipeline_logger",
 ]

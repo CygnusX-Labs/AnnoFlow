@@ -1,57 +1,74 @@
 #!/usr/bin/env python3
 # *---utf-8---*
 """
-Configuration Validation Utilities
-===================================
-Helper functions for loading and validating pipeline configuration.
+AnnoFlow Configuration Validation Utilities
+============================================
+用户配置合并（analysisyaml 优先级链 §3.1）与校验。
 """
 
-import sys
 import os
+
 import yaml
 
+from utils.exceptions import ConfigError
 
-def load_user_config(config, cmd_arg_name="user_yaml") -> None:
+
+def load_user_config(config, cmd_arg_name="analysisyaml"):
     """
-    Parse the configuration file path passed from the command line and merge it into the current config.
+    解析命令行传入的项目级配置文件路径，并递归合并进当前 config。
+
+    优先级（低 → 高）：config 四件套 → analysisyaml → --config key=value
 
     Args:
-        config (dict): Snakemake's global config object
-        cmd_arg_name (str): The key name after --config in command line, defaults to "user_yaml"
+        config (dict): Snakemake 全局 config 对象（原地合并）
+        cmd_arg_name (str): 命令行 --config 的键名，默认 "analysisyaml"
+
+    Raises:
+        ConfigError: 文件不存在或 YAML 解析失败
     """
     custom_path = config.get(cmd_arg_name)
 
-    # If the user didn't pass this parameter, return directly and use the default configuration
     if not custom_path:
         return
 
-    # Check if the file exists
     if not os.path.exists(custom_path):
-        print(f"\n\033[91m[Config Error] Cannot find the specified user configuration file: {custom_path}\033[0m\nPlease check if the path is correct.\n", file=sys.stderr)
-        sys.exit(1)
+        raise ConfigError(
+            f"Cannot find the specified analysisyaml: {custom_path}\n"
+            f"请检查路径是否正确，或通过 --config {cmd_arg_name}=/path/to/project.yaml 传入。"
+        )
 
-    # Load and merge configuration
-    print(f"\033[92m[Config Info] Loading external project configuration: {custom_path}\033[0m")
-    
+    print(f"[Config Info] Loading project configuration: {custom_path}")
+
     try:
-        with open(custom_path, 'r') as f:
+        with open(custom_path, "r") as f:
             custom_data = yaml.safe_load(f)
-        
-        if custom_data:
-            # Core step: recursively merge dictionaries
-            def update_config(base, update):
-                for key, value in update.items():
-                    if key in base and isinstance(base[key], dict) and isinstance(value, dict):
-                        update_config(base[key], value)
-                    else:
-                        base[key] = value
-            
-            update_config(config, custom_data)
-        else:
-            print(f"[Config Warning] File {custom_path} is empty, skipping loading.")
-
     except Exception as e:
-        sys.exit(f"\n[Config Error] Failed to parse YAML file: {e}\n")
+        raise ConfigError(f"Failed to parse analysisyaml '{custom_path}': {e}")
+
+    if not custom_data:
+        print(f"[Config Warning] {custom_path} is empty, skipping.")
+        return
+
+    def _merge(base, update):
+        for key, value in update.items():
+            if key in base and isinstance(base[key], dict) and isinstance(value, dict):
+                _merge(base[key], value)
+            else:
+                base[key] = value
+
+    _merge(config, custom_data)
 
 
-__all__ = ['load_user_config']
+def validate_species(config):
+    """
+    校验物种信息非空（AI taxonomy 判断与报告依赖）。
+    """
+    species = config.get("species", "")
+    if not species or not str(species).strip():
+        raise ConfigError(
+            "配置缺少 species（物种名）。请在 analysisyaml 中设置，如 species: Dioscorea_alata"
+        )
+    return species
+
+
+__all__ = ["load_user_config", "validate_species"]
