@@ -48,6 +48,18 @@ def merge(samples, data_deliver, config, **kwargs):
         "03.merge/kofam_stats.txt",
         "03.merge/kegg_consistency.tsv",
         "03.merge/kegg_consistency_stats.txt",
+        "03.merge/go_annotations.tsv",
+        "03.merge/go_annotations_highconf.tsv",
+        "03.merge/gene2go.tsv",
+        "03.merge/gene2go_highconf.tsv",
+        "03.merge/go_annotation_stats.txt",
+        "03.merge/kegg_shared.tsv",
+        "03.merge/kegg_shared_highconf.tsv",
+        "03.merge/gene2ko_shared.tsv",
+        "03.merge/gene2ko_shared_highconf.tsv",
+        "03.merge/kegg_shared_stats.txt",
+        "03.merge/rnaflow_annotation.tsv",
+        "03.merge/kegg_pathway_names.tsv",
         "03.merge/SUMMARY_REPORT.txt",
     ]:
         data_deliver.append(f)

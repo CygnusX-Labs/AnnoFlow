@@ -53,6 +53,8 @@
 │   ├── integrate_annotations.py
 │   ├── merge_results.py
 │   ├── compare_kegg_annotations.py
+│   ├── export_annotation_sets.py
+│   ├── export_rnaflow_annotation.py  # RNAFlow 衔接：注释表 + KEGG 通路名映射
 │   ├── ai_curator.py
 │   ├── check_input_md5.py
 │   └── deliver.py
@@ -135,10 +137,16 @@ conda install -n base -c conda-forge -c bioconda snakemake
 ```
 <reference_path>/
 ├── dataset/eggnog-mapper/                  # eggnog-mapper 数据库（eggnog.db 等）
-└── dataset/kegg_<date>_ko_dataset/
-    ├── ko_list                             # KofamScan KO 阈值列表
-    └── profiles/                           # KofamScan HMM profiles
+├── dataset/kegg_<date>_ko_dataset/
+│   ├── ko_list                             # KofamScan KO 阈值列表
+│   └── profiles/                           # KofamScan HMM profiles
+└── dataset/kegg_pathway_names.tsv          # KEGG 通路名缓存（首次运行自动生成，离线复用）
 ```
+
+> **注意**：`ko_list` 只含 KO（`K#####`）的阈值与功能定义，**不含通路名**；
+> `eggnog.db` 也只有通路 ID。ko 通路名由 `export_rnaflow_annotation` 规则在首次运行时
+> 从 KEGG REST（`list/pathway/ko` + `list/pathway`）拉取并写入上述缓存文件，
+> 之后所有项目离线复用；也可用 `reference.yaml` 的 `kegg_pathway_names` 键指定其他位置。
 
 ### 3. 编写项目级配置（analysisyaml）
 
@@ -222,7 +230,7 @@ merge: false
 
 ### config/reference.yaml
 
-数据库参考路径集中管理。`reference_path` 入库默认为空（占位），站点真实路径经 analysisyaml 覆盖；`eggnog_data_dir` / `kofam_ko_list` / `kofam_profiles` 相对 `reference_path` 解析（写成绝对路径则直接使用）。
+数据库参考路径集中管理。`reference_path` 入库默认为空（占位），站点真实路径经 analysisyaml 覆盖；`eggnog_data_dir` / `kofam_ko_list` / `kofam_profiles` 相对 `reference_path` 解析（写成绝对路径则直接使用）。`kegg_pathway_names` 为 KEGG 通路名缓存路径（可选，相对 `reference_path` 解析；留空时默认 `<reference_path>/dataset/kegg_pathway_names.tsv`，首次运行由 KEGG REST 自动生成）。
 
 ### config/run_parameter.yaml
 
@@ -273,6 +281,9 @@ input_dir 下蛋白序列（<sample>.pep/.fa/.fasta/.faa/.protein，支持复合
     ├── 06.merge.smk ───────────────────────────────┤
     │    merge_eggnog_results / merge_kofam_results ──► 03.merge/*_all_samples.tsv
     │    compare_kegg_annotations ──► 03.merge/kegg_consistency.tsv   │
+    │    export_annotation_sets ──► 03.merge/go_annotations.tsv 等    │
+    │    export_rnaflow_annotation ──► 03.merge/rnaflow_annotation.tsv│
+    │                                  03.merge/kegg_pathway_names.tsv│
     │    annotation_summary / merge_summary_report ──► {sample}_summary.txt
     │                                                  SUMMARY_REPORT.txt
     │                                                                 │
@@ -295,7 +306,7 @@ input_dir 下蛋白序列（<sample>.pep/.fa/.fasta/.faa/.protein，支持复合
 | 组学层 | 03.eggnog.smk | eggnog_mapper / eggnog_processor | eggnog-mapper 注释 + 质量过滤与可信度评估 |
 | 组学层 | 04.kofamscan.smk | kofamscan / kofamscan_processor | KofamScan KO 注释 + 可信度评估 |
 | 组学层 | 05.integrate.smk | integrate_annotations | 双工具横向整合与冲突裁决 |
-| 组学层 | 06.merge.smk | merge_eggnog_results / merge_kofam_results / compare_kegg_annotations / annotation_summary / merge_summary_report | 多样本合并、KEGG KO 一致性比对与汇总 |
+| 组学层 | 06.merge.smk | merge_eggnog_results / merge_kofam_results / compare_kegg_annotations / export_annotation_sets / export_rnaflow_annotation / annotation_summary / merge_summary_report | 多样本合并、KEGG KO 一致性比对、GO/KO 导出、RNAFlow 衔接导出与汇总 |
 | 组学层 | 07.ai_curator.smk | ai_annotation_curator / ai_multi_sample_summary | AI 逐蛋白可靠性评估（可选） |
 | 收尾层 | 08.deliver.smk | delivery | 交付 manifest（copy 模式） |
 | 收尾层 | 09.Report.smk | generate_project_summary | `project_summary.json` |
@@ -337,6 +348,18 @@ input_dir 下蛋白序列（<sample>.pep/.fa/.fasta/.faa/.protein，支持复合
 ├── kofam_highconf.tsv             # kofam 高可信度合并
 ├── kegg_consistency.tsv           # 双工具 KO 一致性逐蛋白比对 ⭐
 ├── kegg_consistency_stats.txt     # 一致性统计（一致/冲突/一致率）
+├── go_annotations.tsv             # 原始 eggNOG GO 注释，每个 sample+query 一行
+├── go_annotations_highconf.tsv    # GO 高可信版本
+├── gene2go.tsv                    # GO 长表，每个 sample+query+GO 一行
+├── gene2go_highconf.tsv           # GO 高可信长表
+├── go_annotation_stats.txt        # GO 去重计数
+├── kegg_shared.tsv                # 两方法共有 KO，每个 sample+query 一行
+├── kegg_shared_highconf.tsv       # 双方高可信共有 KO
+├── gene2ko_shared.tsv             # 共有 KO 长表，每个 sample+query+KO 一行
+├── gene2ko_shared_highconf.tsv    # 双方高可信共有 KO 长表
+├── kegg_shared_stats.txt          # 共有 KO 去重计数
+├── rnaflow_annotation.tsv         # RNAFlow 直接可用的 GO & KEGG 注释表 ⭐
+├── kegg_pathway_names.tsv         # ko##### 通路 ID -> KEGG 通路名映射
 └── SUMMARY_REPORT.txt             # 整体汇总报告
 
 04.ai/                             # AI 分析结果目录（ai: true 时）
@@ -408,7 +431,52 @@ project_summary.json               # 项目级摘要（report 模块）
 
 #### 5. `03.merge/kegg_consistency.tsv`
 
-双工具 KO 一致性逐蛋白比对：按 `(sample, query)` 对齐两个软件，去掉 `ko:` 前缀后比较 KO 集合。有交集记 `一致`，均有 KO 但无交集记 `冲突`。下游严格集合取 `status=一致` 且双方均为高置信的记录，冲突记录保留供人工复核。
+双工具 KO 一致性逐蛋白比对：按 `(sample, query)` 对齐两个软件，去掉 `ko:` 前缀后比较 KO 集合。有交集记 `一致`，均有 KO 但无交集记 `冲突`。下游需要精确的共有 KO 时使用 `kegg_shared.tsv` / `gene2ko_shared.tsv`（高可信对应 `_highconf`），不要把 `status=一致` 当成整个 KO 集合相同；冲突记录保留供人工复核。
+
+#### 6. 独立 GO 与共有 KEGG KO 导出
+
+`go_annotations.tsv` 与 `go_annotations_highconf.tsv` 每个 `(sample, query)` 一行，含 `go_terms`（分号分隔、去重排序）及 `source`。`gene2go.tsv` 和 `_highconf.tsv` 每个 `(sample, query, go_term)` 一行，另含来源、`evalue`、`bitscore` 和该条 eggNOG 原始记录的 `confidence`；重复 query 的 GO 取并集，不同样本绝不合并。这里的 `query` 是**输入蛋白 ID 原样**，`gene2go` 不负责转为基因 ID，也不删转录本后缀。GO 完整版本直接读取原始 `.emapper.annotations` 的有效 GO，**不受 `require_kegg`、E-value 或 High 条件筛选**；高可信版本复用 eggNOG 现有评分规则，要求 E-value ≤ 配置阈值、Bit-score ≥ 配置阈值且 `confidence_level=High`，但不要求 KEGG。统计中的 `go_only_no_kegg_proteins` 以原始 eggNOG KO 字段为准。这些是 **GO 注释结果，不是 GO 富集分析**。
+
+`kegg_shared.tsv` 与 `_highconf.tsv` 每个 `(sample, query)` 一行，`shared_ko` 是**相同蛋白的两工具 KO 集合交集**（分号分隔）；`eggnog_ko`、`kofam_ko` 给出双方各自的完整已处理集合。`gene2ko_shared.tsv` 与 `_highconf.tsv` 每个 `(sample, query, shared_ko)` 一行，并保留双方 `confidence`、eggNOG `evalue`/`score`（`eggnog_bitscore`）、KofamScan `score`/`kofam_threshold`（原表不含 ratio，故不虚构）。KO 规范为 `Kxxxxx`；不是通路编号，也不是最终 `integrated_ko`。仅 eggNOG 或仅 KofamScan 给出 KO、或者两者 KO 无交集的蛋白不进入共有表；原 `kegg_consistency.tsv` 仍保留单来源与冲突信息；其中 `一致` 指**存在交集**，并不表示 KO 集合完全相等。
+
+普通共有版本来自两个工具**已处理的主表**：eggNOG 主表已经过 E-value、Bit-score、`min_confidence` 及可配置的 `require_kegg`/`require_go` 过滤；KofamScan 主表选每个蛋白最佳 KO，但目前**不按 `min_confidence` 过滤**（该处理器只计算可信度和单独写 High 子集）。高可信共有严格对两工具的 `*_highconf.tsv` 按**同一 KO**再次取交集；上游可信度是 eggNOG 注释记录和 KofamScan 最佳 hit 级别，不是逐 KO 独立验证。这些是双工具共同支持的**注释，不是实验验证结果**。如果主表因 `require_kegg`/其他条件缺少某蛋白，普通共有表不会用原始注释补回。两种导出可从已有原始 eggNOG 文件与两工具已处理表重新生成，不会改写既有注释或 GO 文件。
+
+`go_annotation_stats.txt` / `kegg_shared_stats.txt` 的蛋白数均按 `(sample, query)` 去重，蛋白–term 对按 `(sample, query, term)` 去重；它们的分母为相应原始 GO 或已处理 KO 表中有注释的蛋白，不代表输入 FASTA 总数。
+
+#### 7. RNAFlow 衔接导出（`rnaflow_annotation.tsv` / `kegg_pathway_names.tsv`）
+
+`rnaflow_annotation.tsv` 由 `export_rnaflow_annotation` 规则从 `eggnog_all_samples.tsv` 导出，是 **RNAFlow 富集分析可直接消费的注释表**（全量置信度，含 `confidence_level` 供下游按需过滤；`query` 保留原始转录本 ID，基因 ID 归一由 RNAFlow 侧处理）：
+
+| 列名 | 说明 | 示例 |
+|------|------|------|
+| query | 查询序列 ID（RNAFlow 要求列） | Chr1_gene_70800_mRNA |
+| description | 功能描述 | SNO glutamine amidotransferase family |
+| ec | EC 编号 | 4.3.3.6 |
+| gos | GO 注释（RNAFlow 要求列） | GO:0003674,GO:0003824 |
+| kegg_ko | KEGG KO 编号 | ko:K08681 |
+| kegg_pathway | KEGG 通路 ID（RNAFlow 要求列） | ko00750,map00750 |
+| confidence_level | 可信度等级 | High |
+| confidence_score | 可信度分数 (0-100) | 100 |
+
+`kegg_pathway_names.tsv` 是 `ko##### 通路 ID -> 通路名` 两列映射。名称解析顺序：**参考库缓存 → KEGG REST（ko 列表为主，map 列表补充）→ 内置已退役通路历史名**（ko01130 等，依据 [KEGG 更新记录](https://www.genome.jp/kegg/docs/upd_map.html)）；全部不可用时仍生成文件但映射为空并告警。观测到但没有现行名称的 ID（已退役或数据库过旧）会在日志中列出。
+
+在 RNAFlow 中使用。**推荐**先把两个文件复制到 RNAFlow 参考库中该基因组的目录（与 index/GTF 等参考资产放在一起，避免依赖会被清理的项目目录），再写相对路径：
+
+```bash
+cp 03.merge/rnaflow_annotation.tsv \
+   <RNAFlow_reference>/<genome_version>/<genome_version>_rnaflow_annotation.tsv
+cp 03.merge/kegg_pathway_names.tsv \
+   <RNAFlow_reference>/<genome_version>/<genome_version>_kegg_pathway_names.tsv
+```
+
+```yaml
+# RNAFlow config/reference.yaml 对应基因组条目
+annotation_table: <genome_version>/<genome_version>_rnaflow_annotation.tsv
+annotation_format: eggnog
+kegg_pathway_names: <genome_version>/<genome_version>_kegg_pathway_names.tsv
+```
+
+之后 RNAFlow 的富集结果（`07.Enrichments/*.csv`）的 Description 列即为真实通路名而非 `ko#####` ID。
 
 ### 统计报告解读
 
@@ -559,6 +627,18 @@ python3 scripts/merge_results.py \
     --output-high 03.merge/kofam_high.tsv \
     --output-stats 03.merge/kofam_stats.txt
 ```
+
+### export_rnaflow_annotation.py
+
+```bash
+python3 scripts/export_rnaflow_annotation.py \
+    --input 03.merge/eggnog_all_samples.tsv \
+    --output-annotation 03.merge/rnaflow_annotation.tsv \
+    --output-names 03.merge/kegg_pathway_names.tsv \
+    --names-cache <reference_path>/dataset/kegg_pathway_names.tsv
+```
+
+`--names-cache` 可省略：缓存不存在时自动从 KEGG REST 拉取；完全离线时通路名映射为空（告警但不失败）。可对**已有运行目录**直接补跑，无需重跑整个流程。
 
 ---
 

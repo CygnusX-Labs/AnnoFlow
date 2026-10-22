@@ -97,6 +97,16 @@ EGGNOG_DATA_DIR = config["eggnog_data_dir"]
 KOFAM_KO_LIST = config["kofam_ko_list"]
 KOFAM_PROFILES = config["kofam_profiles"]
 
+# KEGG ko##### 通路名缓存（ko_list 只有 KO 定义，不含通路名）。
+# 缺省放在参考库 dataset/ 根目录；可用 kegg_pathway_names 覆盖（相对 reference_path 解析）。
+_kegg_pathway_names = config.get("kegg_pathway_names")
+if _kegg_pathway_names:
+    KEGG_PATHWAY_NAMES = (_kegg_pathway_names if os.path.isabs(_kegg_pathway_names)
+                          else os.path.join(config.get("reference_path", ""), _kegg_pathway_names))
+else:
+    KEGG_PATHWAY_NAMES = os.path.join(os.path.dirname(os.path.dirname(KOFAM_KO_LIST)),
+                                      "kegg_pathway_names.tsv")
+
 EGGNOG_CPU = config.get("eggnog_cpu", 8)
 KOFAM_CPU = config.get("kofam_cpu", 8)
 
@@ -124,6 +134,8 @@ KOFAMSCAN_PROCESSOR = _resolve_script_path(_scripts.get("kofamscan_processor", "
 MERGE_RESULTS = _resolve_script_path(_scripts.get("merge_results", "scripts/merge_results.py"))
 INTEGRATE_ANNOTATIONS = _resolve_script_path(_scripts.get("integrate_annotations", "scripts/integrate_annotations.py"))
 COMPARE_KEGG = _resolve_script_path(_scripts.get("compare_kegg_annotations", "scripts/compare_kegg_annotations.py"))
+EXPORT_ANNOTATION_SETS = _resolve_script_path(_scripts.get("export_annotation_sets", "scripts/export_annotation_sets.py"))
+EXPORT_RNAFLOW_ANNOTATION = _resolve_script_path(_scripts.get("export_rnaflow_annotation", "scripts/export_rnaflow_annotation.py"))
 AI_CURATOR = _resolve_script_path(_scripts.get("ai_curator", "scripts/ai_curator.py"))
 CHECK_INPUT_MD5 = _resolve_script_path(_scripts.get("check_input_md5", "scripts/check_input_md5.py"))
 DELIVER_SCRIPT = _resolve_script_path(_scripts.get("deliver", "scripts/deliver.py"))
@@ -189,6 +201,7 @@ rule merge:
         "03.merge/eggnog_all_samples.tsv",
         "03.merge/kofam_all_samples.tsv",
         "03.merge/kegg_consistency.tsv",
+        "03.merge/kegg_shared.tsv",
         "03.merge/SUMMARY_REPORT.txt",
     message:
         "✅ Results merged successfully"

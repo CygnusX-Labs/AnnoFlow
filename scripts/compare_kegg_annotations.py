@@ -5,15 +5,13 @@ import argparse
 from pathlib import Path
 import pandas as pd
 
-EMPTY = {"", "-", "nan", "none", "na"}
-
+if __package__:
+    from .annotation_terms import split_kos as _split_kos
+else:
+    from annotation_terms import split_kos as _split_kos
 
 def split_kos(value):
-    if pd.isna(value):
-        return set()
-    parts = [part.strip() for part in str(value).replace(";", ",").split(",")]
-    return {part[3:] if part.startswith("ko:") else part for part in parts
-            if part.lower() not in EMPTY}
+    return _split_kos(value)
 
 
 def read_table(path):

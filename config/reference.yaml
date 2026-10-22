@@ -16,3 +16,7 @@ reference_path: ""
 eggnog_data_dir: "dataset/eggnog-mapper"
 kofam_ko_list: "dataset/kegg_2026-02-01_ko_dataset/ko_list"
 kofam_profiles: "dataset/kegg_2026-02-01_ko_dataset/profiles"
+
+# KEGG ko##### 通路名缓存（ko_list 只含 KO 定义，不含通路名）。
+# 缺省为 dataset/kegg_pathway_names.tsv；首次运行由 KEGG REST 自动生成并缓存。
+kegg_pathway_names: ""

@@ -58,6 +58,7 @@ scripts:
   merge_results: "scripts/merge_results.py"
   integrate_annotations: "scripts/integrate_annotations.py"
   compare_kegg_annotations: "scripts/compare_kegg_annotations.py"
+  export_annotation_sets: "scripts/export_annotation_sets.py"
   ai_curator: "scripts/ai_curator.py"
   check_input_md5: "scripts/check_input_md5.py"
   deliver: "scripts/deliver.py"
