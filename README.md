@@ -14,6 +14,10 @@
 
 AnnoFlow 主要与 [RNAFlow](https://github.com/xsx123123/RNAFlow) 联动使用。非模式生物通常缺少现成的基因功能注释，AnnoFlow 通过 eggnog-mapper 与 KofamScan 为其蛋白序列生成 KO / GO 等标准化注释，并经 `export_rnaflow_annotation` 规则导出 RNAFlow 可直接消费的注释表（`rnaflow_annotation.tsv` + `kegg_pathway_names.tsv`），为下游富集分析提供注释信息。导出格式与对接方法见 [分析流程与结果说明](docs/pipeline.md)。
 
+<p align="center">
+  <img src="docs/AnnoFlow与RNAFlow共享注释参考库流程.png" alt="AnnoFlow 与 RNAFlow 共享注释参考库流程图" width="720">
+</p>
+
 ## 项目特点
 
 - ✅ **模块化设计**: 规则按步骤编号（01-09），每个模块可独立开关，关闭后目标自动从 DAG 消失
