@@ -2,6 +2,16 @@
 
 本文档汇总了 `eggnog_processor.py` 和 `kofamscan_processor.py` 两个脚本的质量过滤逻辑与可信度（Confidence）评分体系。
 
+## 推荐过滤阈值参考
+
+| 质量标准 | 标准模式 | 严格模式 | 说明 |
+|----------|----------|----------|------|
+| E-value | ≤ 1e-5 | ≤ 1e-10 | 控制假阳性 |
+| Bit-score | ≥ 60 | ≥ 80 | 比对得分 |
+| Percentage identity | ≥ 40-50% | ≥ 70% | 序列同一性 |
+| Query coverage | ≥ 20% | ≥ 30% | 查询序列覆盖率 |
+| Subject coverage | ≥ 30% | ≥ 50% | 参考序列覆盖率 |
+
 ## Snakemake 输出与下游使用
 
 - `03.merge/SUMMARY_REPORT.txt` 自动记录实际配置的筛选阈值、注释计数和两个软件的 KO 一致性，不需要手动修改每次运行的报告。

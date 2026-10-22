@@ -1,8 +1,18 @@
+<p align="center">
+  <img src="docs/AnnoFlow_logo.png" alt="AnnoFlow logo" width="160">
+</p>
+
 # AnnoFlow
 
 基因功能注释流程（Flow 家族成员）：eggnog-mapper 提供 KEGG/GO/COG/EC/Pfam/CAZy 全功能注释，KofamScan 提供 KO 交叉验证，整合层做双工具冲突裁决，可选 AI 驱动的逐蛋白可靠性审核。基于 Snakemake + Conda，模块化设计、质量过滤、可信度评估、交付与报告一体化。
 
 版本：`AnnoFlow v1.0.0`（唯一版本来源为 `config/config.yaml` 的 `pipeline_version`）。
+
+> **许可证**：AnnoFlow 采用 [MIT License](./LICENSE) 发布。
+
+## 🤝 与 RNAFlow 联动
+
+AnnoFlow 主要与 [RNAFlow](https://github.com/xsx123123/RNAFlow) 联动使用。非模式生物通常缺少现成的基因功能注释，AnnoFlow 通过 eggnog-mapper 与 KofamScan 为其蛋白序列生成 KO / GO 等标准化注释，并经 `export_rnaflow_annotation` 规则导出 RNAFlow 可直接消费的注释表（`rnaflow_annotation.tsv` + `kegg_pathway_names.tsv`），为下游富集分析提供注释信息。导出格式与对接方法见 [分析流程与结果说明](docs/pipeline.md)。
 
 ## 项目特点
 
@@ -18,7 +28,27 @@
 - ✅ **灵活输入**: 支持 `.pep`、`.fa`、`.fasta`、`.faa`、`.protein` 及复合扩展名（如 `.fa.TD2.1k.pep`）
 - ✅ **Schema 强制验证**: 启动即校验项目配置，路径错误 fail-fast，不浪费集群资源
 
----
+## Flow 家族架构
+
+AnnoFlow 对齐 Flow 框架规范（`Standard/FlowFrame` 子模块），配置优先级链：
+
+```
+config 四件套（仓库默认值） < analysisyaml（项目级） < --config key=value（命令行）
+```
+
+模块开关（`config/config.yaml`，关闭模块请写进 analysisyaml，不要用 `--config` 传布尔值）：
+
+| 模块 | 默认 | 说明 |
+|------|------|------|
+| eggnog | true | eggnog-mapper 功能注释（KEGG/GO/COG/EC/Pfam/CAZy） |
+| kofamscan | true | KofamScan KO 注释 |
+| integrate | true | 双工具整合评分与冲突裁决 |
+| merge | true | 多样本合并、KO 一致性比对与汇总 |
+| ai | false | AI 逐蛋白可靠性评估（需配置 `ai_config`） |
+| deliver | true | 交付 delivery_manifest（copy 模式） |
+| report | true | `project_summary.json` 最小报告 |
+
+依赖自动启用：开启下游模块时缺失的上游会被自动打开并记录警告日志。配置四件套、样本表、交付/报告与监控推送的详细说明见 [使用指南](docs/usage.md)。
 
 ## 目录结构
 
@@ -46,79 +76,16 @@
 │   ├── 07.ai_curator.smk          # AI 逐蛋白可靠性评估（可选）
 │   ├── 08.deliver.smk             # 交付清单（delivery manifest）
 │   ├── 09.Report.smk              # project_summary.json
-│   └── utils/                     # 框架工具（目标生成、配置校验、资源、日志等 8 个模块）
-├── scripts/                       # Python 处理脚本
-│   ├── eggnog_processor.py
-│   ├── kofamscan_processor.py
-│   ├── integrate_annotations.py
-│   ├── merge_results.py
-│   ├── compare_kegg_annotations.py
-│   ├── export_annotation_sets.py
-│   ├── export_rnaflow_annotation.py  # RNAFlow 衔接：注释表 + KEGG 通路名映射
-│   ├── ai_curator.py
-│   ├── check_input_md5.py
-│   └── deliver.py
-├── env/                           # Conda 环境配置
-│   ├── eggnog-mapper.yaml
-│   ├── kofamscan.yaml
-│   ├── openai.yaml
-│   └── py3.12.yaml
-├── docs/
-│   └── filtering_standards.md     # 过滤与可信度评估标准详解
+│   └── utils/                     # 框架工具（目标生成、配置校验、资源、日志等）
+├── scripts/                       # Python 处理脚本（eggnog/kofamscan_processor、
+│                                  #   integrate/merge、export_rnaflow_annotation、
+│                                  #   ai_curator、check_input_md5、deliver 等）
+├── env/                           # Conda 环境配置（eggnog-mapper / kofamscan / py3.12 / openai）
+├── docs/                          # 文档（见下方文档索引）
+├── Standard/FlowFrame             # Flow 框架规范（子模块）
 └── test/
     └── TD2.1k.pep                 # 测试数据（1000 条蛋白序列）
 ```
-
----
-
-## Flow 家族架构
-
-AnnoFlow 对齐 Flow 框架规范，与家族内其他流程共享同一套运行约定。
-
-### 模块开关与依赖自动启用
-
-`config/config.yaml` 中每个模块都有显式布尔开关（默认值必须显式写出）：
-
-| 模块 | 默认 | 说明 |
-|------|------|------|
-| eggnog | true | eggnog-mapper 功能注释（KEGG/GO/COG/EC/Pfam/CAZy） |
-| kofamscan | true | KofamScan KO 注释 |
-| integrate | true | 双工具整合评分与冲突裁决 |
-| merge | true | 多样本合并、KO 一致性比对与汇总 |
-| ai | false | AI 逐蛋白可靠性评估（需配置 `ai_config`） |
-| deliver | true | 交付 delivery_manifest（copy 模式） |
-| report | true | `project_summary.json` 最小报告 |
-
-依赖自动启用：integrate 依赖 eggnog + kofamscan，merge 依赖 integrate，ai 依赖 integrate——开启下游模块时缺失的上游会被自动打开并记录警告日志。任一开关设为 `false`，其产物目标即从 DAG 中消失。
-
-### 输入 MD5 硬性门控（rules/02.input_md5.smk）
-
-所有样本输入文件必须完成 MD5 校验才生成 `01.qc/md5_check.tsv`；下游 `eggnog_mapper` / `kofamscan` 显式依赖该门控文件，校验不过根本不会启动比对。行为规则：
-
-- `input_dir` 下存在 `md5.txt`（格式：`<md5><空格><文件名>`）→ 逐文件比对
-- 无 `md5.txt` → 计算并记录基线，标记 PASS（SRA 兼容原则）
-- 任一 FAIL 或输入文件缺失 → 立即非零退出，流程中止
-
-### 配置四件套 + schema 验证
-
-启动时的配置优先级链：
-
-```
-config 四件套（仓库默认值） < analysisyaml（项目级） < --config key=value（命令行）
-```
-
-四件套：`config/config.yaml`（流程控制）、`config/reference.yaml`（数据库路径）、`config/run_parameter.yaml`（线程与阈值）、`config/cluster_config.yaml`（资源 profile）。合并后经 `schema/config.schema.yaml` **强制验证**：必填 `project_name`、`species`、`sample_csv`、`workflow`、`data_deliver`、`input_dir`、`reference_path`，其中后五个路径键**必须绝对路径**（样本表解析发生在 workdir 重定向前）。参考数据库路径同时做 fail-fast 检查，dry-run 即可暴露路径错误。
-
-### 交付与报告
-
-- **deliver**（默认开）：产物 copy 到 `data_deliver`，生成 `delivery_manifest.json`（来源、大小、MD5、动作）、`delivery_manifest.md5`、`delivery_details.log`
-- **report**（默认开）：生成 `project_summary.json`（项目元数据、样本列表、模块启用状态、关键产物清单）
-
-### 监控推送（可选）
-
-`monitor_config.yaml` 为 OmicHub 工作流监控推送配置模板，与 `--logger rich-loguru` 配套使用；token 等敏感值一律用 `${ENV_VAR}` 引用环境变量，禁止写真实值。
-
----
 
 ## 快速开始
 
@@ -132,21 +99,15 @@ conda install -n base -c conda-forge -c bioconda snakemake
 
 ### 2. 准备数据库目录
 
-按参考目录约定部署数据库（本站实例：`/data/jzhang/reference/AnnoFlow`）：
-
 ```
 <reference_path>/
-├── dataset/eggnog-mapper/                  # eggnog-mapper 数据库（eggnog.db 等）
-├── dataset/kegg_<date>_ko_dataset/
-│   ├── ko_list                             # KofamScan KO 阈值列表
-│   └── profiles/                           # KofamScan HMM profiles
-└── dataset/kegg_pathway_names.tsv          # KEGG 通路名缓存（首次运行自动生成，离线复用）
+└── dataset/
+    ├── eggnog-mapper/                  # eggnog-mapper 数据库（eggnog.db 等）
+    ├── kegg_<date>_ko_dataset/         # KofamScan ko_list + profiles
+    └── kegg_pathway_names.tsv          # KEGG 通路名缓存（首次运行自动生成，离线复用）
 ```
 
-> **注意**：`ko_list` 只含 KO（`K#####`）的阈值与功能定义，**不含通路名**；
-> `eggnog.db` 也只有通路 ID。ko 通路名由 `export_rnaflow_annotation` 规则在首次运行时
-> 从 KEGG REST（`list/pathway/ko` + `list/pathway`）拉取并写入上述缓存文件，
-> 之后所有项目离线复用；也可用 `reference.yaml` 的 `kegg_pathway_names` 键指定其他位置。
+三个数据库组件的下载、生成与部署方法见 [参考数据库准备指南](docs/database_preparation.md)。
 
 ### 3. 编写项目级配置（analysisyaml）
 
@@ -167,793 +128,55 @@ input_dir: /data/project/00.protein                 # 输入蛋白序列目录
 reference_path: /data/jzhang/reference/AnnoFlow
 ```
 
-样本表（`sample` 匹配 `input_dir` 下 `<sample>.pep/.fa/.fasta/.faa/.protein`，支持复合扩展名如 `.fa.TD2.1k.pep`）：
-
-```csv
-sample,sample_name
-TD2.1k,TD2.1k
-```
-
 ### 4. 运行
 
-Flow 框架标准运行方式：
-
 ```bash
+# dry-run：查看执行计划，同时暴露配置/路径错误
+snakemake -s /path/to/AnnoFlow/snakefile -n \
+  --config analysisyaml=/path/to/project.yaml
+
+# 正式运行
 snakemake -s /path/to/AnnoFlow/snakefile --cores 8 --use-conda --conda-frontend mamba \
   --rerun-triggers mtime --logger rich-loguru \
   --config analysisyaml=/path/to/project.yaml
 ```
 
-### 常用命令
+常用目标：`annotate`（仅注释）、`reports`（分析摘要）、`merge`（多样本合并）、`ai_analysis`（AI 分析）。完整命令与参数说明见 [使用指南](docs/usage.md)。
 
-```bash
-# 1. dry-run：查看执行计划（不实际运行），同时暴露配置/路径错误
-snakemake -s /path/to/AnnoFlow/snakefile -n --config analysisyaml=/path/to/project.yaml
-
-# 2. 仅运行注释（eggnog + KofamScan 处理结果）
-snakemake -s /path/to/AnnoFlow/snakefile --cores 8 --use-conda --conda-frontend mamba \
-  --config analysisyaml=/path/to/project.yaml annotate
-
-# 3. 仅运行 AI 分析（需 analysisyaml 中 ai: true，且已有注释结果）
-snakemake -s /path/to/AnnoFlow/snakefile --cores 8 --use-conda --conda-frontend mamba \
-  --config analysisyaml=/path/to/project.yaml ai_analysis
-
-# 4. 仅合并多样本结果
-snakemake -s /path/to/AnnoFlow/snakefile --cores 4 --use-conda --conda-frontend mamba \
-  --config analysisyaml=/path/to/project.yaml merge
-
-# 5. 仅生成分析摘要（单样本 summary + SUMMARY_REPORT.txt，不含 project_summary.json）
-snakemake -s /path/to/AnnoFlow/snakefile --cores 4 --use-conda --conda-frontend mamba \
-  --config analysisyaml=/path/to/project.yaml reports
-
-# 6. 生成 DAG 图
-snakemake -s /path/to/AnnoFlow/snakefile --config analysisyaml=/path/to/project.yaml \
-  --dag | dot -Tpng > dag.png
-```
-
-**关闭模块请写进 analysisyaml，不要用 `--config` 传布尔值**——`--config merge=false` 中的 `false` 会被解析为字符串，非空字符串恒为真，模块关不掉（本流程以 `config.get(k) is not False` 判定开关）：
-
-```yaml
-# project.yaml 中关闭 merge（eggnog/kofamscan/integrate/ai/deliver/report 同理）：
-merge: false
-```
-
-标量参数（如 `evalue_threshold`）仍可用 `--config key=value` 临时覆盖，分析级设置建议一律写 analysisyaml。
-
----
-
-## 配置说明
-
-### config/config.yaml
-
-仓库级默认配置：流程控制（`pipeline_version`、`log_level`、`execution_mode`）、输入门控（`raw_data.md5`，期望的校验文件名，默认 `md5.txt`）、**模块开关**（见上表）、`ai_config` 段、`scripts` 脚本路径表。
-
-### config/reference.yaml
-
-数据库参考路径集中管理。`reference_path` 入库默认为空（占位），站点真实路径经 analysisyaml 覆盖；`eggnog_data_dir` / `kofam_ko_list` / `kofam_profiles` 相对 `reference_path` 解析（写成绝对路径则直接使用）。`kegg_pathway_names` 为 KEGG 通路名缓存路径（可选，相对 `reference_path` 解析；留空时默认 `<reference_path>/dataset/kegg_pathway_names.tsv`，首次运行由 KEGG REST 自动生成）。
-
-### config/run_parameter.yaml
-
-```yaml
-eggnog_cpu: 8                # eggnog-mapper 线程数
-kofam_cpu: 8                 # KofamScan 线程数
-evalue_threshold: 1.0e-5     # E-value 阈值（越小越严格）
-bitscore_threshold: 60       # Bit-score 阈值（越大越严格）
-min_confidence: "High"       # 最低可信度: High | Medium | Low
-require_kegg: true           # 是否要求必须有 KEGG 注释
-require_go: false            # 是否要求必须有 GO 注释
-```
-
-### config/cluster_config.yaml
-
-`resource_profiles` 定义 low_resource / default / high_resource / very_high_resource 四档（各含 threads / mem_mb / runtime / queue_type），`clusters` 段将 queue_type 映射为实际队列名。`execution_mode: cluster` 时经 `--profile`/调度插件消费；local 模式下资源 profile 仅作参考。
-
-### 样本表 samples.csv
-
-模板见 `config/samples.csv`。`sample` 为唯一标识（用于文件命名，不得重复、不得含空格），`sample_name` 为显示名称（可选，用于报告）。支持复合扩展名匹配：样本写 `TD2.1k`，实际文件可为 `TD2.1k.pep`、`TD2.1k.fa` 或 `TD2.1k.fa.TD2.1k.pep`。
-
----
-
-## 分析流程详解
-
-### 流程图
+## 流程概览
 
 ```
-input_dir 下蛋白序列（<sample>.pep/.fa/.fasta/.faa/.protein，支持复合扩展名）
-    │
-    ▼  🔐 MD5 硬性门控（02.input_md5.smk）
-01.qc/md5_check.tsv                ← 有 md5.txt 则比对，无则记录基线 PASS
-    │
-    ├── 03.eggnog.smk ──────────────────────────────┐
-    │    eggnog_mapper ──► 01.eggnog/{sample}.emapper.annotations
-    │    eggnog_processor ──► 01.eggnog/{sample}_eggnog.tsv           │
-    │                         01.eggnog/{sample}_eggnog_highconf.tsv  │
-    │                                                                 │
-    ├── 04.kofamscan.smk ───────────────────────────┤
-    │    kofamscan ──► 02.kofam/{sample}_kofam_detail.txt             │
-    │    kofamscan_processor ──► 02.kofam/{sample}_kofam.tsv          │
-    │                            02.kofam/{sample}_kofam_highconf.tsv │
-    │                                                                 │
-    ├── 05.integrate.smk ───────────────────────────┤
-    │    integrate_annotations ──► 03.merge/{sample}_integrated.tsv   │
-    │                              03.merge/{sample}_integrated_report│
-    │                                                                 │
-    ├── 06.merge.smk ───────────────────────────────┤
-    │    merge_eggnog_results / merge_kofam_results ──► 03.merge/*_all_samples.tsv
-    │    compare_kegg_annotations ──► 03.merge/kegg_consistency.tsv   │
-    │    export_annotation_sets ──► 03.merge/go_annotations.tsv 等    │
-    │    export_rnaflow_annotation ──► 03.merge/rnaflow_annotation.tsv│
-    │                                  03.merge/kegg_pathway_names.tsv│
-    │    annotation_summary / merge_summary_report ──► {sample}_summary.txt
-    │                                                  SUMMARY_REPORT.txt
-    │                                                                 │
-    ├── 07.ai_curator.smk（ai: true）───────────────┤
-    │    ai_annotation_curator ──► 04.ai/{sample}_ai_report.md 等     │
-    │                                                                 │
-    ├── 08.deliver.smk ─────────────────────────────┤
-    │    delivery ──► {data_deliver}/delivery_manifest.json/.md5      │
-    │                 {data_deliver}/delivery_details.log             │
-    └── 09.Report.smk ──────────────────────────────┘
-         generate_project_summary ──► project_summary.json
+输入蛋白序列 → 01.qc MD5 硬性门控
+             → 01.eggnog / 02.kofam 双工具注释与质量过滤
+             → 03.merge 整合评分 + 多样本合并 + KO 一致性比对 + RNAFlow 导出
+             → 04.ai 逐蛋白 AI 可靠性评估（可选）
+             → data_deliver 交付清单 + project_summary.json
 ```
 
-### 各步骤说明
-
-| 层 | 规则文件 | 主要 rule | 说明 |
-|----|---------|-----------|------|
-| 通用层 | 01.common.smk | —（输入解析辅助函数） | 无业务 rule |
-| 通用层 | 02.input_md5.smk | input_md5_check | 输入 MD5 硬性门控，产出 `01.qc/md5_check.tsv` |
-| 组学层 | 03.eggnog.smk | eggnog_mapper / eggnog_processor | eggnog-mapper 注释 + 质量过滤与可信度评估 |
-| 组学层 | 04.kofamscan.smk | kofamscan / kofamscan_processor | KofamScan KO 注释 + 可信度评估 |
-| 组学层 | 05.integrate.smk | integrate_annotations | 双工具横向整合与冲突裁决 |
-| 组学层 | 06.merge.smk | merge_eggnog_results / merge_kofam_results / compare_kegg_annotations / export_annotation_sets / export_rnaflow_annotation / annotation_summary / merge_summary_report | 多样本合并、KEGG KO 一致性比对、GO/KO 导出、RNAFlow 衔接导出与汇总 |
-| 组学层 | 07.ai_curator.smk | ai_annotation_curator / ai_multi_sample_summary | AI 逐蛋白可靠性评估（可选） |
-| 收尾层 | 08.deliver.smk | delivery | 交付 manifest（copy 模式） |
-| 收尾层 | 09.Report.smk | generate_project_summary | `project_summary.json` |
-
-> 日志与基准：`logs/`、`benchmarks/` 目录编号与 rule 文件号一致（如 `logs/03.eggnog/`、`logs/04.kofam/`）。
-
----
-
-## 结果解读
-
-### 输出文件结构
-
-```
-01.qc/                             # 输入校验
-└── md5_check.tsv                  # 输入 MD5 校验结果（门控文件）⭐
-
-01.eggnog/                         # eggnog-mapper 结果目录
-├── {sample}.emapper.annotations   # eggnog 原始输出
-├── {sample}.emapper.hits          # 比对详情
-├── {sample}.emapper.seed_orthologs
-├── {sample}_eggnog.tsv            # 处理后的 eggnog 结果 ⭐
-├── {sample}_eggnog_highconf.tsv   # 高可信度子集 ⭐
-└── {sample}_eggnog_report.txt     # 处理报告
-
-02.kofam/                          # KofamScan 结果目录
-├── {sample}_kofam_detail.txt      # KofamScan 原始输出
-├── {sample}_kofam_raw.tsv         # mapper 格式原始输出
-├── {sample}_kofam.tsv             # 处理后的 Kofam 结果
-├── {sample}_kofam_highconf.tsv    # 高可信度子集
-└── {sample}_kofam_report.txt      # 处理报告
-
-03.merge/                          # 整合与合并结果目录
-├── {sample}_integrated.tsv        # 单样本整合结果
-├── {sample}_integrated_report.txt # 整合评分报告
-├── {sample}_summary.txt           # 单样本摘要报告
-├── eggnog_all_samples.tsv         # eggnog 多样本合并 ⭐⭐
-├── eggnog_highconf.tsv            # eggnog 高可信度合并
-├── kofam_all_samples.tsv          # kofam 多样本合并
-├── kofam_highconf.tsv             # kofam 高可信度合并
-├── kegg_consistency.tsv           # 双工具 KO 一致性逐蛋白比对 ⭐
-├── kegg_consistency_stats.txt     # 一致性统计（一致/冲突/一致率）
-├── go_annotations.tsv             # 原始 eggNOG GO 注释，每个 sample+query 一行
-├── go_annotations_highconf.tsv    # GO 高可信版本
-├── gene2go.tsv                    # GO 长表，每个 sample+query+GO 一行
-├── gene2go_highconf.tsv           # GO 高可信长表
-├── go_annotation_stats.txt        # GO 去重计数
-├── kegg_shared.tsv                # 两方法共有 KO，每个 sample+query 一行
-├── kegg_shared_highconf.tsv       # 双方高可信共有 KO
-├── gene2ko_shared.tsv             # 共有 KO 长表，每个 sample+query+KO 一行
-├── gene2ko_shared_highconf.tsv    # 双方高可信共有 KO 长表
-├── kegg_shared_stats.txt          # 共有 KO 去重计数
-├── rnaflow_annotation.tsv         # RNAFlow 直接可用的 GO & KEGG 注释表 ⭐
-├── kegg_pathway_names.tsv         # ko##### 通路 ID -> KEGG 通路名映射
-└── SUMMARY_REPORT.txt             # 整体汇总报告
-
-04.ai/                             # AI 分析结果目录（ai: true 时）
-├── {sample}_ai_report.md          # AI 逐蛋白评估报告（Markdown）
-├── {sample}_ai_analysis.json      # 结构化评估数据（JSON）
-├── {sample}_ai_analysis.tsv       # 评估结果 TSV
-├── {sample}_ai_analysis.csv       # 评估结果 CSV
-└── AI_MULTI_SAMPLE_SUMMARY.md     # 多样本 AI 汇总
-
-{data_deliver}/                    # 交付目录（deliver 模块）
-├── delivery_manifest.json         # 交付文件清单（来源、大小、MD5、动作）
-├── delivery_manifest.md5          # 各交付文件 MD5 列表
-└── delivery_details.log           # 逐文件交付日志
-
-project_summary.json               # 项目级摘要（report 模块）
-```
-
-### 结果文件格式
-
-#### 1. `{sample}_eggnog.tsv`
-
-主结果文件，包含完整的注释信息和可信度评估：
-
-| 列名 | 说明 | 示例 |
-|------|------|------|
-| query | 查询序列 ID | gene_1 |
-| seed_ortholog | 最佳匹配的种子同源基因 | 71139.XP_010029570.1 |
-| evalue | E-value（越小越好）| 1.58e-168 |
-| score | Bit-score（越大越好）| 485.0 |
-| eggnog_ogs | eggNOG 直系同源组 | COG0679@1\|root,... |
-| cog_category | COG 功能分类 | S |
-| description | 功能描述 | Transporter |
-| kegg_ko | KEGG KO 编号 | ko:K07088 |
-| kegg_pathway | KEGG 通路 | ko03030,map03030 |
-| gos | GO 注释 | GO:0003674,GO:0005215 |
-| ec | EC 编号 | 1.8.4.12 |
-| **confidence_level** | 可信度等级 | High/Medium/Low |
-| **confidence_score** | 可信度分数 (0-100) | 95 |
-| **confidence_reason** | 可信度说明 | High quality annotation |
-
-#### 2. `{sample}_eggnog_highconf.tsv`
-
-高可信度子集，只包含 confidence_level = "High" 的记录，格式同上。
-
-#### 3. `03.merge/eggnog_all_samples.tsv`
-
-多样本合并结果，**新增 sample 列**标识样本来源：
-
-| sample | query | evalue | score | kegg_ko | confidence_level |
-|--------|-------|--------|-------|---------|------------------|
-| sample1 | gene1 | 1e-100 | 200 | ko:K00001 | High |
-| sample1 | gene2 | 1e-50 | 150 | ko:K00002 | Medium |
-| sample2 | gene1 | 1e-120 | 250 | ko:K00001 | High |
-
-#### 4. `03.merge/{sample}_integrated.tsv`
-
-整合评分结果，同时包含 eggNOG 和 KofamScan 的字段，以及综合评分：
-
-| 列名 | 说明 |
+| 输出 | 内容 |
 |------|------|
-| query | 蛋白 ID |
-| integrated_ko | 最终选定的 KO |
-| ko_agreement | agree / conflict / single_source |
-| integrated_score | 综合评分 (0-100) |
-| integrated_level | High / Medium / Low |
-| eggnog_kegg_ko | eggNOG 的 KO |
-| kofam_ko | KofamScan 的 KO |
-| ... | 其余 eggnog + kofam 原始字段 |
-
-#### 5. `03.merge/kegg_consistency.tsv`
-
-双工具 KO 一致性逐蛋白比对：按 `(sample, query)` 对齐两个软件，去掉 `ko:` 前缀后比较 KO 集合。有交集记 `一致`，均有 KO 但无交集记 `冲突`。下游需要精确的共有 KO 时使用 `kegg_shared.tsv` / `gene2ko_shared.tsv`（高可信对应 `_highconf`），不要把 `status=一致` 当成整个 KO 集合相同；冲突记录保留供人工复核。
-
-#### 6. 独立 GO 与共有 KEGG KO 导出
-
-`go_annotations.tsv` 与 `go_annotations_highconf.tsv` 每个 `(sample, query)` 一行，含 `go_terms`（分号分隔、去重排序）及 `source`。`gene2go.tsv` 和 `_highconf.tsv` 每个 `(sample, query, go_term)` 一行，另含来源、`evalue`、`bitscore` 和该条 eggNOG 原始记录的 `confidence`；重复 query 的 GO 取并集，不同样本绝不合并。这里的 `query` 是**输入蛋白 ID 原样**，`gene2go` 不负责转为基因 ID，也不删转录本后缀。GO 完整版本直接读取原始 `.emapper.annotations` 的有效 GO，**不受 `require_kegg`、E-value 或 High 条件筛选**；高可信版本复用 eggNOG 现有评分规则，要求 E-value ≤ 配置阈值、Bit-score ≥ 配置阈值且 `confidence_level=High`，但不要求 KEGG。统计中的 `go_only_no_kegg_proteins` 以原始 eggNOG KO 字段为准。这些是 **GO 注释结果，不是 GO 富集分析**。
-
-`kegg_shared.tsv` 与 `_highconf.tsv` 每个 `(sample, query)` 一行，`shared_ko` 是**相同蛋白的两工具 KO 集合交集**（分号分隔）；`eggnog_ko`、`kofam_ko` 给出双方各自的完整已处理集合。`gene2ko_shared.tsv` 与 `_highconf.tsv` 每个 `(sample, query, shared_ko)` 一行，并保留双方 `confidence`、eggNOG `evalue`/`score`（`eggnog_bitscore`）、KofamScan `score`/`kofam_threshold`（原表不含 ratio，故不虚构）。KO 规范为 `Kxxxxx`；不是通路编号，也不是最终 `integrated_ko`。仅 eggNOG 或仅 KofamScan 给出 KO、或者两者 KO 无交集的蛋白不进入共有表；原 `kegg_consistency.tsv` 仍保留单来源与冲突信息；其中 `一致` 指**存在交集**，并不表示 KO 集合完全相等。
-
-普通共有版本来自两个工具**已处理的主表**：eggNOG 主表已经过 E-value、Bit-score、`min_confidence` 及可配置的 `require_kegg`/`require_go` 过滤；KofamScan 主表选每个蛋白最佳 KO，但目前**不按 `min_confidence` 过滤**（该处理器只计算可信度和单独写 High 子集）。高可信共有严格对两工具的 `*_highconf.tsv` 按**同一 KO**再次取交集；上游可信度是 eggNOG 注释记录和 KofamScan 最佳 hit 级别，不是逐 KO 独立验证。这些是双工具共同支持的**注释，不是实验验证结果**。如果主表因 `require_kegg`/其他条件缺少某蛋白，普通共有表不会用原始注释补回。两种导出可从已有原始 eggNOG 文件与两工具已处理表重新生成，不会改写既有注释或 GO 文件。
-
-`go_annotation_stats.txt` / `kegg_shared_stats.txt` 的蛋白数均按 `(sample, query)` 去重，蛋白–term 对按 `(sample, query, term)` 去重；它们的分母为相应原始 GO 或已处理 KO 表中有注释的蛋白，不代表输入 FASTA 总数。
-
-#### 7. RNAFlow 衔接导出（`rnaflow_annotation.tsv` / `kegg_pathway_names.tsv`）
-
-`rnaflow_annotation.tsv` 由 `export_rnaflow_annotation` 规则从 `eggnog_all_samples.tsv` 导出，是 **RNAFlow 富集分析可直接消费的注释表**（全量置信度，含 `confidence_level` 供下游按需过滤；`query` 保留原始转录本 ID，基因 ID 归一由 RNAFlow 侧处理）：
-
-| 列名 | 说明 | 示例 |
-|------|------|------|
-| query | 查询序列 ID（RNAFlow 要求列） | Chr1_gene_70800_mRNA |
-| description | 功能描述 | SNO glutamine amidotransferase family |
-| ec | EC 编号 | 4.3.3.6 |
-| gos | GO 注释（RNAFlow 要求列） | GO:0003674,GO:0003824 |
-| kegg_ko | KEGG KO 编号 | ko:K08681 |
-| kegg_pathway | KEGG 通路 ID（RNAFlow 要求列） | ko00750,map00750 |
-| confidence_level | 可信度等级 | High |
-| confidence_score | 可信度分数 (0-100) | 100 |
-
-`kegg_pathway_names.tsv` 是 `ko##### 通路 ID -> 通路名` 两列映射。名称解析顺序：**参考库缓存 → KEGG REST（ko 列表为主，map 列表补充）→ 内置已退役通路历史名**（ko01130 等，依据 [KEGG 更新记录](https://www.genome.jp/kegg/docs/upd_map.html)）；全部不可用时仍生成文件但映射为空并告警。观测到但没有现行名称的 ID（已退役或数据库过旧）会在日志中列出。
-
-在 RNAFlow 中使用。**推荐**先把两个文件复制到 RNAFlow 参考库中该基因组的目录（与 index/GTF 等参考资产放在一起，避免依赖会被清理的项目目录），再写相对路径：
-
-```bash
-cp 03.merge/rnaflow_annotation.tsv \
-   <RNAFlow_reference>/<genome_version>/<genome_version>_rnaflow_annotation.tsv
-cp 03.merge/kegg_pathway_names.tsv \
-   <RNAFlow_reference>/<genome_version>/<genome_version>_kegg_pathway_names.tsv
-```
-
-```yaml
-# RNAFlow config/reference.yaml 对应基因组条目
-annotation_table: <genome_version>/<genome_version>_rnaflow_annotation.tsv
-annotation_format: eggnog
-kegg_pathway_names: <genome_version>/<genome_version>_kegg_pathway_names.tsv
-```
-
-之后 RNAFlow 的富集结果（`07.Enrichments/*.csv`）的 Description 列即为真实通路名而非 `ko#####` ID。
-
-### 统计报告解读
-
-#### 处理报告示例 (`*_report.txt`)
-
-```
-EggNOG Annotation Processing Report
-======================================================================
-
-Parameters:
-  E-value threshold: 1e-05
-  Bit-score threshold: 60
-  Mode: Standard
-  Min confidence: High
-
-Statistics:
-  Total records: 99          ← 原始注释数
-  Passed filter: 63 (63.6%)  ← 通过质量过滤
-  Filtered out: 36 (36.4%)   ← 被过滤掉
-
-Confidence Distribution:
-  High: 92 (92.9%)           ← 高可信度 (推荐)
-  Medium: 7 (7.1%)           ← 中等可信度
-  Low: 0 (0.0%)              ← 低可信度
-
-Annotation Coverage:
-  With KEGG: 64 (64.6%)      ← 有 KEGG 注释
-  With GO: 60 (60.6%)        ← 有 GO 注释
-  With both KEGG and GO: 43 (43.4%)  ← 同时有两者
-```
-
-### 可信度评分标准
-
-详见 `docs/filtering_standards.md`。简要如下：
-
-**eggnog_processor**（0-100分）
-- E-value 评分（0-40分）
-- Bit-score 评分（0-30分）
-- 注释完整性评分（0-30分，基于 GO/KO/EC/Pfam/CAZy）
-
-**kofamscan_processor**（40-95分）
-- High：通过阈值（`*`）且 score ≥ threshold
-- Medium：未过阈值但 score > 100 或 evalue < 1e-20
-- Low：score < 60 或 evalue > 1e-5
-
-| 等级 | 总分范围 | 说明 | 建议 |
-|------|----------|------|------|
-| **High** | 80-100 | 高质量注释 | 可放心使用 |
-| **Medium** | 50-79 | 中等质量 | 建议复核关键结果 |
-| **Low** | 0-49 | 低质量 | 建议谨慎使用或丢弃 |
-
----
-
-## 示例分析：test/TD2.1k.pep
-
-**样本信息**: 1000 条蛋白质序列（转录组 ORF 预测产物，含复合命名格式的 FASTA 头）
-
-**最小可运行配置**:
-
-```yaml
-# project.yaml
-project_name: annoflow_test
-species: test_species
-sample_csv: /path/to/samples.csv    # 内容：TD2.1k,TD2.1k（test/ 同结构）
-workflow: /path/to/test_workdir
-data_deliver: /path/to/test_deliver
-input_dir: /path/to/AnnoFlow/test   # 含 TD2.1k.pep
-reference_path: /data/jzhang/reference/AnnoFlow
-```
-
-**运行**:
-
-```bash
-snakemake -s /path/to/AnnoFlow/snakefile --cores 4 --use-conda --conda-frontend mamba \
-  --rerun-triggers mtime --logger rich-loguru \
-  --config analysisyaml=project.yaml
-```
-
-**查看结果**: `01.qc/md5_check.tsv`（输入校验）→ `01.eggnog/TD2.1k_eggnog_report.txt`（过滤统计）→ `03.merge/SUMMARY_REPORT.txt`（整体汇总）→ `project_summary.json`（项目摘要）。
-
----
-
-## 脚本独立使用
-
-各脚本可脱离 Snakemake 单独运行（环境：`env/py3.12.yaml`）。
-
-### eggnog_processor.py
-
-```bash
-# 基本用法
-python3 scripts/eggnog_processor.py \
-    -i 01.eggnog/TD2.1k.emapper.annotations \
-    -o 01.eggnog/TD2.1k_eggnog
-
-# 高可信度 + KEGG 过滤
-python3 scripts/eggnog_processor.py \
-    -i test.emapper.annotations \
-    -o filtered \
-    --min-confidence High \
-    --require-kegg
-
-# 自定义阈值
-python3 scripts/eggnog_processor.py \
-    -i test.emapper.annotations \
-    -o strict_filtered \
-    --evalue 1e-10 \
-    --bitscore 80
-```
-
-### kofamscan_processor.py
-
-```bash
-python3 scripts/kofamscan_processor.py \
-    -i 02.kofam/TD2.1k_kofam_detail.txt \
-    -o 02.kofam/TD2.1k_kofam \
-    -e 01.eggnog/TD2.1k.emapper.annotations \
-    --min-confidence High
-```
-
-### integrate_annotations.py
-
-```bash
-python3 scripts/integrate_annotations.py \
-    -e 01.eggnog/TD2.1k_eggnog.tsv \
-    -k 02.kofam/TD2.1k_kofam.tsv \
-    -s TD2.1k \
-    -o 03.merge/TD2.1k
-```
-
-### merge_results.py
-
-```bash
-# 合并 eggnog 结果
-python3 scripts/merge_results.py \
-    --input-dir 01.eggnog \
-    --samples sample1 sample2 sample3 \
-    --tool eggnog \
-    --output-all 03.merge/eggnog_all.tsv \
-    --output-high 03.merge/eggnog_high.tsv \
-    --output-stats 03.merge/eggnog_stats.txt
-
-# 合并 kofam 结果
-python3 scripts/merge_results.py \
-    --input-dir 02.kofam \
-    --samples sample1 sample2 sample3 \
-    --tool kofam \
-    --output-all 03.merge/kofam_all.tsv \
-    --output-high 03.merge/kofam_high.tsv \
-    --output-stats 03.merge/kofam_stats.txt
-```
-
-### export_rnaflow_annotation.py
-
-```bash
-python3 scripts/export_rnaflow_annotation.py \
-    --input 03.merge/eggnog_all_samples.tsv \
-    --output-annotation 03.merge/rnaflow_annotation.tsv \
-    --output-names 03.merge/kegg_pathway_names.tsv \
-    --names-cache <reference_path>/dataset/kegg_pathway_names.tsv
-```
-
-`--names-cache` 可省略：缓存不存在时自动从 KEGG REST 拉取；完全离线时通路名映射为空（告警但不失败）。可对**已有运行目录**直接补跑，无需重跑整个流程。
-
----
-
-## AI 注释分析功能
-
-AnnoFlow 支持 AI 驱动的**逐蛋白可靠性评估**（模块开关 `ai: true`，默认关闭），而非仅样本级汇总统计。
-
-### 功能特点
-
-- **逐蛋白可靠性评估**: 对每条蛋白分别评估 eggNOG 和 KofamScan 的可靠性
-- **物种合理性判断**: 结合 `taxonomy` 参数，判断注释功能对该物种是否合理
-- **Tax_scope 精确度检查**: 评估 eggNOG `tax_scope` 与物种分类的匹配层级
-- **KofamScan 阈值比值解读**: 结合 KO 类型（管家基因 vs 稀有基因）判断 ratio 可信度
-- **工具一致性检测**: 自动标记 eggNOG 与 KofamScan 的 KO 冲突
-- **分层筛选降本**: 高置信/低质量两端由规则直接判定，仅模糊区域送 AI
-- **Token 消耗追踪**: 自动统计 prompt/completion/total tokens，便于成本控制
-
-### 支持的 AI 提供商
-
-| 提供商 | 模型示例 | 特点 |
-|--------|---------|------|
-| **Ollama** (默认) | llama3.2, mistral | 本地运行，无需联网，免费 |
-| **OpenAI** | gpt-4, gpt-3.5-turbo | 云端 API，性能强 |
-| **Claude** | claude-3-sonnet | 云端 API，擅长长文本 |
-
-### 快速开始
-
-#### 1. 使用本地 Ollama（推荐）
-
-```bash
-# 安装 Ollama
-curl -fsSL https://ollama.com/install.sh | sh
-
-# 下载模型（以 llama3.2 为例，4GB 左右）
-ollama pull llama3.2
-
-# 确认服务运行
-curl http://localhost:11434/api/tags
-```
-
-#### 2. 在 analysisyaml 中启用 AI
-
-```yaml
-# project.yaml
-ai: true                 # 模块开关（替代旧版的 enabled 开关）
-ai_config:
-  provider: "ollama"
-  model: "llama3.2"
-  taxonomy: "Bacteria;Firmicutes;Bacillales"  # 你的物种分类
-  max_proteins: 50                              # 仅对模糊区域最多评估 50 个蛋白
-  # api_base: "http://localhost:11434"         # 可选：自定义端点
-```
-
-#### 3. 运行分析
-
-```bash
-# 运行完整流程（包含 AI 分析）
-snakemake -s /path/to/AnnoFlow/snakefile --cores 8 --use-conda --conda-frontend mamba \
-  --config analysisyaml=/path/to/project.yaml
-
-# 或仅运行 AI 分析（已有注释结果时）
-snakemake -s /path/to/AnnoFlow/snakefile --cores 8 --use-conda --conda-frontend mamba \
-  --config analysisyaml=/path/to/project.yaml ai_analysis
-```
-
-### 输出结果
-
-```
-04.ai/
-├── {sample}_ai_report.md          # AI 逐蛋白评估报告（Markdown）⭐
-├── {sample}_ai_analysis.json      # 结构化评估数据（JSON）⭐
-└── AI_MULTI_SAMPLE_SUMMARY.md     # 多样本汇总（多样本时）
-```
-
-#### AI 报告内容示例
-
-```markdown
-# AI 注释分析报告（逐蛋白评估）
-
-## 处理策略与 Token 消耗
-- 规则直接判定: 230 个蛋白（不消耗 token）
-- AI 实际评估: 50 个蛋白
-- Total tokens: 184,320
-
-## 整体质量汇总
-- High confidence: 42 (14.0%)
-- Medium confidence: 28 (9.3%)
-- Low confidence: 8 (2.7%)
-- Cross-tool conflicts: 5
-
-## 潜在问题蛋白（Top 20）
-- `gene_23` | Overall: Low | Action: Reject | Source: AI | Flags: Eukaryota tax_scope in bacteria
-...
-```
-
-### 分层筛选策略说明
-
-为控制 Token 成本，`ai_curator.py` 默认开启**分层筛选**（可将 `ai_config.no_auto_filter` 设为 `true` 关闭）：
-
-| 分类 | 判定标准 | 处理方式 | Token 消耗 |
-|------|----------|----------|-----------|
-| **高置信** | `e-value < 1e-10` **且** `Kofam ratio > 1.5` | 规则直接 `Accept` | 0 |
-| **低质量** | `e-value > 1e-3` **或** `Kofam ratio < 0.5` | 规则直接 `Reject` | 0 |
-| **模糊区域** | 其余蛋白 | 送 AI 评估 | 有 |
-
-这意味着对于一个 3000 蛋白的基因组，可能只有 300-600 个蛋白进入模糊区域，再按 `max_proteins` 限制后，实际 API 调用可能只有几十个，大幅降低成本。
-
----
-
-## 安全指南 🔒
-
-### API 密钥安全最佳实践
-
-**⚠️  绝对不要直接在配置文件中写入真实 API key！**
-
-#### 安全风险
-
-| 方式 | 风险等级 | 说明 |
-|------|---------|------|
-| 明文写在 yaml 配置 | 🔴 极高 | 可能被提交到 Git，泄露密钥 |
-| 命令行参数传递 | 🟠 高 | 会被记录在 shell 历史和进程列表 |
-| 环境变量（✅ 推荐） | 🟢 低 | 只在内存中存在，不会持久化到文件 |
-
-#### ✅ 推荐做法：使用环境变量
-
-##### 步骤 1：设置环境变量（在运行前）
-
-```bash
-# 方式 1：当前 shell 会话（推荐用于测试）
-export AI_API_KEY="sk-your-actual-api-key"
-
-# 方式 2：写入 ~/.bashrc 或 ~/.zshrc（长期有效）
-echo 'export AI_API_KEY="sk-your-actual-api-key"' >> ~/.bashrc
-source ~/.bashrc
-```
-
-##### 步骤 2：在 ai_config 中只写变量名
-
-```yaml
-ai: true
-ai_config:
-  provider: "openai"
-  model: "glm-4.7"
-  api_key: "AI_API_KEY"      # ← ✅ 只写变量名，不写真实 key
-  api_base: "https://dashscope.aliyuncs.com/compatible-mode/v1"
-```
-
-##### 步骤 3：运行分析
-
-```bash
-snakemake -s /path/to/AnnoFlow/snakefile --cores 8 --use-conda --conda-frontend mamba \
-  --config analysisyaml=/path/to/project.yaml
-```
-
-### 🔐 安全机制说明
-
-本流程已实施以下安全措施：
-
-1. **配置占位检测**：`api_key` 约定为全大写环境变量名格式，脚本从环境变量读取真实值；真实 key 永不入库
-2. **命令行保护**：即使通过命令行传入 key，也会立即转移到环境变量，避免在 `ps` 进程列表中暴露
-3. **日志脱敏**：API key 不会出现在任何日志文件中，日志只显示 `长度: 32` 而非真实内容
-4. **Git 保护**：`.gitignore` 已包含 `.env`、`*.log`、运行产物等，防止意外提交敏感信息
-5. **监控配置同策略**：`monitor_config.yaml` 的 token / signing key 一律用 `${ENV_VAR}` 引用
-
-### 使用不同云平台
-
-#### 阿里云百炼 (DashScope)
-
-```bash
-export DASHSCOPE_API_KEY="sk-your-dashscope-key"
-```
-
-```yaml
-ai: true
-ai_config:
-  provider: "openai"  # 阿里云使用兼容模式
-  model: "glm-4.7"
-  api_key: "DASHSCOPE_API_KEY"
-  api_base: "https://dashscope.aliyuncs.com/compatible-mode/v1"
-```
-
-#### OpenAI 官方
-
-```bash
-export OPENAI_API_KEY="sk-your-openai-key"
-```
-
-```yaml
-ai: true
-ai_config:
-  provider: "openai"
-  model: "gpt-4"
-  api_key: "OPENAI_API_KEY"
-  # api_base 默认为 https://api.openai.com/v1
-```
-
-#### 本地 Ollama（最安全，无需 API key）
-
-```bash
-# 无需设置 API key
-ollama serve
-```
-
-```yaml
-ai: true
-ai_config:
-  provider: "ollama"
-  model: "llama3.2"
-  # api_key 留空
-  # api_base: "http://localhost:11434"
-```
-
----
-
-## 从旧版迁移
-
-本流程由早期 KEGG 注释流程（kegg annotation pipeline 仓库）重构而来并更名 AnnoFlow。旧项目升级要点：
-
-| 旧版 | AnnoFlow |
-|------|----------|
-| `conf` 目录四份配置（config / resource / parameter / ai） | `config` 目录四件套：`config.yaml`（默认）+ `reference.yaml` + `run_parameter.yaml` + `cluster_config.yaml`；项目级差异写入 analysisyaml |
-| 根目录示例配置 | `examples/analysisyaml.example.yaml` |
-| 配置里的 `samples:` 样本列表 | 样本表 CSV（模板 `config/samples.csv`，两列 `sample,sample_name`），经 `sample_csv` 指定 |
-| AI 的 `enabled` 开关（`ai` 段内） | 顶层模块开关 `ai: true` + 同级 `ai_config:` 段（provider / model / api_key / api_base / taxonomy / max_proteins / no_auto_filter） |
-| 大写驼峰命名的 KofamScan 处理脚本 | `scripts/kofamscan_processor.py`（全小写） |
-| 通用 Python 环境文件（基于 python3 命名） | `env/py3.12.yaml` |
-| 规则文件 02.config / 08.report | 已删除：配置集中在 snakefile 入口，规则重新编号 01-09，新增 02.input_md5（MD5 门控）、08.deliver（交付）、09.Report |
-| 100 条蛋白的旧测试样本 | `test/TD2.1k.pep`（1000 条蛋白序列） |
-| 直接 `snakemake --use-conda` | 标准命令：`-s <AnnoFlow>/snakefile --use-conda --conda-frontend mamba --rerun-triggers mtime --logger rich-loguru --config analysisyaml=<project.yaml>` |
-
-迁移步骤：准备数据库目录（`dataset/eggnog-mapper` + `dataset/kegg_<date>_ko_dataset`）→ 将旧样本列表改写为 `samples.csv` → 按 `examples/analysisyaml.example.yaml` 填写七项必填配置 → dry-run 验证 → 正式运行。
-
----
-
-## 常见问题
-
-### Q1: 首次运行很慢？
-
-A: 首次运行时需要下载并创建 Conda 环境，可能需要 10-30 分钟。环境创建后会缓存，后续运行会很快。
-
-### Q2: eggnog-mapper 找不到数据库？
-
-A: 确认 analysisyaml 中的 `reference_path` 指向参考目录根，且其下存在 `dataset/eggnog-mapper/`（含 `eggnog.db`）与 `dataset/kegg_<date>_ko_dataset/`。参考路径在启动时 fail-fast 检查，先跑 dry-run（`-n`）即可暴露路径错误。
-
-### Q3: 如何只处理已有结果，不重新跑注释？
-
-A: 已有 `01.eggnog/*.emapper.annotations` 后，可直接运行后续处理步骤：
-
-```bash
-snakemake -s /path/to/AnnoFlow/snakefile --cores 4 --use-conda --conda-frontend mamba \
-  --config analysisyaml=/path/to/project.yaml annotate
-```
-
-### Q4: 如何调整过滤严格程度？
-
-A: 在 analysisyaml 中覆盖 `run_parameter.yaml` 的阈值键：
-
-```yaml
-# 严格模式
-evalue_threshold: 1.0e-10
-bitscore_threshold: 80
-min_confidence: "High"
-
-# 宽松模式
-evalue_threshold: 1.0e-5
-bitscore_threshold: 40
-min_confidence: "Medium"
-```
-
-### Q5: 多样本如何合并分析？
-
-A: 在 `samples.csv` 中每行一个样本，运行后自动生成 `03.merge/` 下的合并结果与 `SUMMARY_REPORT.txt`。
-
-### Q6: AI 分析为什么没有评估所有蛋白？
-
-A: 这是正常的成本控制设计。默认开启分层筛选：高置信和低质量蛋白由规则直接判定，只有模糊区域才送 AI。如需扩大评估量，在 analysisyaml 的 `ai_config` 中调大 `max_proteins`；全量评估则设 `no_auto_filter: true`（⚠️ 会消耗大量 Token）。
-
-### Q7: 输入文件名带复合扩展名（如 `.fa.TD2.1k.pep`）如何配置？
-
-A: 输入解析已支持复合扩展名。样本表 `sample` 列写基础名即可：
-
-```csv
-sample,sample_name
-rnabloom_transcript_LongOrfs,RNA-Bloom ORFs
-```
-
-系统会自动匹配 `rnabloom_transcript_LongOrfs.fa.TD2.1k.pep`。
-
-### Q8: 为什么 `--config ai=false` 关不掉 AI 模块？
-
-A: 命令行 `--config` 的布尔值会被解析为字符串，非空字符串恒为真。关闭模块请在 analysisyaml 中写 `ai: false`（其余模块开关同理）。
-
----
-
-## 过滤阈值参考
-
-| 质量标准 | 标准模式 | 严格模式 | 说明 |
-|----------|----------|----------|------|
-| E-value | ≤ 1e-5 | ≤ 1e-10 | 控制假阳性 |
-| Bit-score | ≥ 60 | ≥ 80 | 比对得分 |
-| Percentage identity | ≥ 40-50% | ≥ 70% | 序列同一性 |
-| Query coverage | ≥ 20% | ≥ 30% | 查询序列覆盖率 |
-| Subject coverage | ≥ 30% | ≥ 50% | 参考序列覆盖率 |
-
----
-
-## 文档与参考
-
-- **过滤标准详解**: 见 `docs/filtering_standards.md`
-- **项目级配置示例**: 见 `examples/analysisyaml.example.yaml`
-- **Snakemake 官方文档**: https://snakemake.readthedocs.io/
-- **eggnog-mapper 文档**: https://github.com/eggnogdb/eggnog-mapper
-- **KofamScan 文档**: https://www.genome.jp/tools/kofamkoala/
-
----
+| `01.qc/md5_check.tsv` | 输入 MD5 校验结果（门控文件） |
+| `01.eggnog/` | eggnog-mapper 注释结果与可信度评估 ⭐ |
+| `02.kofam/` | KofamScan 注释结果与可信度评估 |
+| `03.merge/` | 整合评分、多样本合并、KO 一致性、GO/KO 导出、`rnaflow_annotation.tsv` ⭐ |
+| `04.ai/` | AI 逐蛋白评估报告（可选） |
+| `{data_deliver}/` + `project_summary.json` | 交付清单与项目摘要 |
+
+完整的流程图、各步骤规则说明、结果文件格式与统计报告解读见 [分析流程与结果说明](docs/pipeline.md)。
+
+## 文档
+
+| 文档 | 内容 |
+|------|------|
+| [使用指南](docs/usage.md) | 配置体系、模块开关、常用命令、测试数据、脚本独立使用、旧版迁移 |
+| [参考数据库准备指南](docs/database_preparation.md) | eggnog / KOfam / KEGG 通路名映射的下载、生成与部署 |
+| [分析流程与结果说明](docs/pipeline.md) | 流程图、各步骤说明、输出文件结构与格式、RNAFlow 对接 |
+| [AI 注释分析](docs/ai_analysis.md) | 逐蛋白评估、分层筛选策略、API 密钥安全 |
+| [常见问题](docs/faq.md) | 运行、数据库、过滤、多样本、AI 等常见问题 |
+| [过滤与可信度评估标准](docs/filtering_standards.md) | 两个 processor 的评分体系详解、阈值参考 |
+| [KEGG 注释工具教程](docs/kegg-annotation.md) | KEGG REST / KofamScan / eggnog-mapper 原理与手动用法 |
+
+外部参考：[Snakemake](https://snakemake.readthedocs.io/) · [eggnog-mapper](https://github.com/eggnogdb/eggnog-mapper) · [KofamScan](https://www.genome.jp/tools/kofamkoala/)
 
 ## 依赖
 
@@ -962,8 +185,6 @@ A: 命令行 `--config` 的布尔值会被解析为字符串，非空字符串�
 - KofamScan 1.3.0（`env/kofamscan.yaml`）
 - Snakemake 9.9.0+
 - Conda/Mamba
-
----
 
 ## 引用
 
